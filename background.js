@@ -1,11 +1,19 @@
 
 let webSocket = null;
 
+const pairCode = Math.random().toString(36).slice(2, 8).toUpperCase();
+console.log("🔑 Pair code:", pairCode);
+
 function connect() {
   webSocket = new WebSocket('ws://localhost:3000');
 
-  webSocket.onopen = (event) => {
-    console.log('websocket open');
+  webSocket.onopen = () => {
+    webSocket.send(
+      JSON.stringify({
+        type: "PAIR",
+        pairCode
+      })
+    );
   };
 
   webSocket.onmessage = (event) => {
@@ -27,6 +35,20 @@ function disconnect() {
 }
 
 connect();
+
+chrome.runtime.onMessage.addListener((msg) => {
+  // state coming from content script
+  console.log("Background received message: ", msg);
+  if (msg.type === "STATE_UPDATE") {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    }
+    return;
+  }
+
+  forwardToTab(msg);
+});
+
 
 const forwardToTab = (msg) => {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
