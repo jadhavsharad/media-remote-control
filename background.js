@@ -37,13 +37,11 @@ function disconnect() {
 connect();
 
 chrome.runtime.onMessage.addListener((msg) => {
-  // state coming from content script
   console.log("Background received message: ", msg);
   if (msg.type === "STATE_UPDATE") {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(msg));
+    if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+      webSocket.send(JSON.stringify(msg));
     }
-    return;
   }
 
   forwardToTab(msg);
@@ -51,12 +49,14 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 
 const forwardToTab = (msg) => {
+  if (!isAllowed(msg)) return;
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    console.log(tabs)
-    chrome.tabs.sendMessage(tabs[0].id, msg, () => {
-      if (chrome.runtime.lastError) {
-        console.log("❌ No content script to notify about tab update");
-      }
-    })
+    if (!tabs.length) return;
+    chrome.tabs.sendMessage(tabs[0].id, msg);
   });
+}
+
+function isAllowed(msg) {
+  console.log("isAllowed check for message: ", msg);
+  return msg.action === "TOGGLE_PLAYBACK";
 }
