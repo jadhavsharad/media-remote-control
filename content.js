@@ -1,10 +1,22 @@
 let currentVideo = null;
 
-function sendState(video) {
-  chrome.runtime.sendMessage({
-    type: "STATE_UPDATE",
-    state: video.paused ? "PAUSED" : "PLAYING"
-  });
+function onPlay() {
+  SendState("PLAYING");
+}
+
+function onPause() {
+  SendState("PAUSED");
+}
+
+function SendState(state) {
+  try {
+    chrome.runtime.sendMessage({
+      type: "STATE_UPDATE",
+      state
+    });
+  } catch {
+    console.warn("Failed to send state update to background script");
+  }
 }
 
 function attachVideo(video) {
@@ -14,14 +26,14 @@ function attachVideo(video) {
     currentVideo.removeEventListener("pause", onPause);
   }
   currentVideo = video;
-  video.addEventListener("play", () => sendState(video));
-  video.addEventListener("pause", () => sendState(video));
+  video.addEventListener("play", onPlay);
+  video.addEventListener("pause", onPause);
 }
 
 function observeVideoElement() {
   const observer = new MutationObserver(() => {
     const video = document.querySelector("video");
-    if (video) attachVideo(video), observer.disconnect();;
+    if (video) attachVideo(video);
   });
 
   observer.observe(document.body, {
@@ -32,9 +44,13 @@ function observeVideoElement() {
 
 observeVideoElement();
 
-
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.action !== "TOGGLE_PLAYBACK") return;
   if (!currentVideo) return;
-  currentVideo.paused ? currentVideo.play() : currentVideo.pause();
+
+  try {
+    currentVideo.paused ? currentVideo.play() : currentVideo.pause();
+  } catch {
+    console.warn("Failed to toggle video playback");
+  }
 });
