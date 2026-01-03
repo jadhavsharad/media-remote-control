@@ -14,7 +14,10 @@ function connectWebSocket() {
 
   socket.onmessage = (event) => {
     const msg = JSON.parse(event.data);
-    forwardToActiveTab(msg);
+    if (msg.type === "PAIR_SUCCESS") {
+      console.log("✅ Paired successfully with code:", msg.pairCode);
+    }
+    // forwardToActiveTab(msg);
   };
 
   socket.onclose = () => {
@@ -53,3 +56,55 @@ function forwardToActiveTab(msg) {
     });
   });
 }
+
+chrome.tabs.onCreated.addListener(tab => {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        type: "TAB_CREATED",
+        tabId: tab.id,
+        url: tab.url || "",
+        title: tab.title || "",
+        status: tab.status || ""
+      }));
+    }
+  console.log("🆕 Created:", tab.id);
+});
+
+chrome.tabs.onRemoved.addListener(tabId => {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        type: "TAB_CLOSED",
+        tabId: tabId
+      }));
+    }
+  console.log("❌ Removed:", tabId);
+});
+
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  chrome.tabs.get(tabId, tab => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        type: "TAB_ACTIVATED",
+        tabId: tab.id,
+        url: tab.url || "",
+        title: tab.title || ""
+      }));
+    }
+    console.log("🎯 Active:", tab.id, tab.url);
+  });
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === "complete") {
+    console.log("✅ Loaded:", tab.id, tab.url);
+  }
+});
+
+
+function listAllTabs(){
+  chrome.tabs.query({}, (tabs) => {
+    console.log("All open tabs:", tabs);
+  });
+}
+
+listAllTabs();
