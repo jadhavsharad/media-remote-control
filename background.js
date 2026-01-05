@@ -39,7 +39,7 @@ async function GET_MEDIA_TABS() {
 
 async function CONNECT_WEBSOCKET() {
   SESSION_IDENTITY = await GET_SESSION_IDENTITY();
-  socket = new WebSocket("ws://localhost:3000");
+  socket = new WebSocket("ws://localhost:3001");
 
   socket.onopen = () => {
     socket.send(JSON.stringify({
@@ -60,11 +60,6 @@ async function CONNECT_WEBSOCKET() {
 
     if (!response?.type) return;
 
-    console.log(response)
-
-    if (response.type === TRIGGERS.HOST_REGISTERED) {
-      console.log("Pair with the key: ", SESSION_IDENTITY)
-    }
     if (response.type === TRIGGERS.REMOTE_JOIN_REQUEST) {
       console.log(response.deviceId)
       socket.send(JSON.stringify({
@@ -79,6 +74,9 @@ async function CONNECT_WEBSOCKET() {
         deviceId: response.deviceId,
         tabs: mediaTabs
       }));
+    }
+    if (response.type === TRIGGERS.SELECT_ACTIVE_TAB) {
+      ACTIVE_TAB.set(response.deviceId, response.tabId);
     }
     if (response.type === TRIGGERS.CONTROL_EVENT) {
       const tabId = ACTIVE_TAB.get(response.deviceId);
@@ -100,7 +98,6 @@ CONNECT_WEBSOCKET();
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === TRIGGERS.STATE_UPDATE) {
-    console.log("State update:", msg.state);
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(msg));
     }
