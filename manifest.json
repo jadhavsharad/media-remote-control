@@ -3,10 +3,11 @@
   "minimum_chrome_version": "116",
   "name": "Remote Media Control",
   "version": "0.1",
-  "permissions": ["tabs"],
+  "permissions": ["tabs", "storage"],
   "host_permissions": ["<all_urls>"],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "content_scripts": [
     {

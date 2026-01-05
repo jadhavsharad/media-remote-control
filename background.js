@@ -1,8 +1,9 @@
-import TRIGGERS from "./constants.js"
+import { TRIGGERS, TAB_ACTIVITY, MEDIA_URL_PATTERNS } from "./constants.js"
 
 const hostId = chrome.runtime.id;
 let socket = null;
 let SESSION_IDENTITY = null
+const ACTIVE_TAB = new Map();
 
 function GENERATE_SESSION_IDENTITY() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -24,10 +25,21 @@ function GET_SESSION_IDENTITY() {
 }
 
 
-async function connectWebSocket() {
-  // implement error catch if server does not work it will show error and then only session identity generation
-  socket = new WebSocket("ws://localhost:3000"); 
-  SESSION_IDENTITY =  await GET_SESSION_IDENTITY();
+async function GET_MEDIA_TABS() {
+  const tabs = await chrome.tabs.query({});
+  return tabs
+    .filter(tab => tab.url && MEDIA_URL_PATTERNS.some(p => tab.url.includes(p)))
+    .map(tab => ({
+      tabId: tab.id,
+      title: tab.title,
+      url: tab.url,
+      favIconUrl: tab.favIconUrl || null
+    }));
+}
+
+async function CONNECT_WEBSOCKET() {
+  SESSION_IDENTITY = await GET_SESSION_IDENTITY();
+  socket = new WebSocket("ws://localhost:3000");
 
   socket.onopen = () => {
     socket.send(JSON.stringify({
@@ -38,16 +50,18 @@ async function connectWebSocket() {
     );
   };
 
-  socket.onmessage = (event) => {
+  socket.onmessage = async (event) => {
     let response;
     try {
       response = JSON.parse(event.data);
     } catch {
       return;
     }
-    
+
     if (!response?.type) return;
-    
+
+    console.log(response)
+
     if (response.type === TRIGGERS.HOST_REGISTERED) {
       console.log("Pair with the key: ", SESSION_IDENTITY)
     }
@@ -58,11 +72,18 @@ async function connectWebSocket() {
         deviceId: response.deviceId
       }))
     }
+    if (response.type === TRIGGERS.REMOTE_JOINED) {
+      const mediaTabs = await GET_MEDIA_TABS();
+      socket.send(JSON.stringify({
+        type: TRIGGERS.MEDIA_TABS_LIST,
+        deviceId: response.deviceId,
+        tabs: mediaTabs
+      }));
+    }
     if (response.type === TRIGGERS.CONTROL_EVENT) {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (!tabs.length) return;
-        chrome.tabs.sendMessage(tabs[0].id, response);
-      });
+      const tabId = ACTIVE_TAB.get(response.deviceId);
+      if (!tabId) return;
+      chrome.tabs.sendMessage(tabId, response);
     }
     if (response.type === TRIGGERS.PAIR_INVALID) {
       console.warn("Pair invalid:", response.reason);
@@ -71,11 +92,11 @@ async function connectWebSocket() {
 
   socket.onclose = () => {
     socket = null;
-    setTimeout(connectWebSocket, 1000);
+    setTimeout(CONNECT_WEBSOCKET, 1000);
   };
 }
 
-connectWebSocket();
+CONNECT_WEBSOCKET();
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === TRIGGERS.STATE_UPDATE) {
@@ -84,108 +105,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       socket.send(JSON.stringify(msg));
     }
   }
-
-  // if (msg.type === "GET_PAIRING_CODE") {
-  //   sendResponse({ SESSION_IDENTITY });
-  //   return true;
-  // }
-});
-
-function isAllowed(msg) {
-  return msg.action === "TOGGLE_PLAYBACK";
-}
-
-function forwardToActiveTab(msg) {
-  if (!isAllowed(msg)) return;
-
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (!tabs.length) return;
-
-    chrome.tabs.sendMessage(tabs[0].id, msg).catch((err) => {
-      console.error("Failed to send message to content script:", err);
-    });
-  });
-}
-
-chrome.tabs.onCreated.addListener(tab => {
-  if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({
-      type: "TAB_CREATED",
-      tabId: tab.id,
-      url: tab.url || "",
-      title: tab.title || "",
-      status: tab.status || ""
-    }));
-  }
-  console.log("🆕 Created:", tab.id);
-});
-
-chrome.tabs.onRemoved.addListener(tabId => {
-  if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({
-      type: "TAB_CLOSED",
-      tabId: tabId
-    }));
-  }
-  console.log("❌ Removed:", tabId);
-});
-
-chrome.tabs.onActivated.addListener(({ tabId }) => {
-  chrome.tabs.get(tabId, tab => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({
-        type: "TAB_ACTIVATED",
-        tabId: tab.id,
-        url: tab.url || "",
-        title: tab.title || ""
-      }));
-    }
-    console.log("🎯 Active:", tab.id, tab.url);
-  });
-});
-
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === "complete") {
-    console.log("✅ Loaded:", tab.id, tab.url);
+  if (msg.type === TRIGGERS.GET_SESSION_IDENTITY) {
+    sendResponse({ SESSION_IDENTITY });
+    return true;
   }
 });
 
-
-function listAllTabs() {
-  chrome.tabs.query({}, (tabs) => {
-    console.log("All open tabs:", tabs);
-  });
-}
-
-// listAllTabs();
-
-function getDeviceInfo() {
-  const info = {
-    userAgent: navigator.userAgent,
-    platform: navigator.platform,
-    language: navigator.language,
-    isOnline: navigator.onLine,
-    deviceMemory: navigator.deviceMemory || 'N/A',
-    isMobile: navigator.userAgentData ? navigator.userAgentData.mobile : undefined,
-    appName: navigator.appName,
-    appVersion: navigator.appVersion,
-    vendor: navigator.vendor,
-    hardwareConcurrency: navigator.hardwareConcurrency || 'N/A',
-    appCodeName: navigator.appCodeName,
-    product: navigator.product,
-    productSub: navigator.productSub,
-    buildID: navigator.buildID || 'N/A',
-    cookieEnabled: navigator.cookieEnabled,
-    doNotTrack: navigator.doNotTrack || 'N/A',
-    platform: navigator.platform,
-    extensionID: chrome.runtime.id
-
-
-
-
-  };
-  console.log("Device Information:", info);
-  return info;
-}
-
-// getDeviceInfo()
