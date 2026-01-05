@@ -1,4 +1,4 @@
-const CONNECTION = Object.freeze({
+const TRIGGERS = Object.freeze({
     REGISTER_HOST: 'REGISTER_HOST',
     JOIN_PAIR: 'JOIN_PAIR',
     HOST_REGISTERED: 'HOST_REGISTERED',
@@ -9,10 +9,29 @@ const CONNECTION = Object.freeze({
     STATE_UPDATE: 'STATE_UPDATE',
     REMOTE_APPROVED: 'REMOTE_APPROVED',
     REMOTE_JOIN_REQUEST: 'REMOTE_JOIN_REQUEST',
+    GET_SESSION_IDENTITY: 'GET_SESSION_IDENTITY',
+    MEDIA_TABS_LIST: 'MEDIA_TABS_LIST',
+    SELECT_ACTIVE_TAB: 'SELECT_ACTIVE_TAB',
     ROLE: {
         HOST: 'HOST',
         REMOTE: 'REMOTE',
     }
 });
 
-export default CONNECTION;
+const TAB_ACTIVITY = Object.freeze({
+    TAB_CREATED: 'TAB_CREATED',
+    TAB_CLOSED: 'TAB_CLOSED',
+    TAB_ACTIVE: 'TAB_ACTIVE',
+    TAB_LOAD_COMPLETE: 'TAB_LOAD_COMPLETE',
+})
+
+const MEDIA_URL_PATTERNS = [
+    "youtube.com",
+    "netflix.com",
+    "primevideo.com",
+    "hotstar.com",
+    "vimeo.com"
+];
+
+
+export { TRIGGERS, TAB_ACTIVITY, MEDIA_URL_PATTERNS }

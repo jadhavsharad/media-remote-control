@@ -1,15 +1,32 @@
-const codeDiv = document.getElementById("PAIRING_CODE");
-const qrCanvas = document.getElementById("PAIRING_QR");
+const statusEl = document.getElementById("status");
+const sessionEl = document.getElementById("session");
+const disconnectBtn = document.getElementById("disconnect");
 
-chrome.runtime.sendMessage({ type: "GET_PAIRING_CODE" }, (res) => {
-  const pairCode = res.pairCode;
-  codeDiv.textContent = "Code: " + pairCode;
+chrome.runtime.sendMessage(
+  { type: "POPUP_GET_STATUS" },
+  (response) => {
+    if (!response) {
+      statusEl.textContent = "Status: Unavailable";
+      return;
+    }
 
-  const url = `http://192.168.0.107:5173/?pair=${pairCode}`;
+    const { connected, sessionIdentity } = response;
 
-  new QRCode(qrCanvas, {
-    text: url,
-    width: 200,
-    height: 200
+    if (connected) {
+      statusEl.textContent = "Status: Remote control active";
+      sessionEl.textContent = `Session: ${sessionIdentity}`;
+
+      disconnectBtn.disabled = false;
+      disconnectBtn.classList.remove("inactive");
+    } else {
+      statusEl.textContent = "Status: Disconnected";
+      sessionEl.textContent = "Session: —";
+    }
+  }
+);
+
+disconnectBtn.addEventListener("click", () => {
+  chrome.runtime.sendMessage({ type: "POPUP_DISCONNECT" }, () => {
+    window.close();
   });
 });

@@ -1,34 +1,60 @@
-import { TRIGGERS, TAB_ACTIVITY, MEDIA_URL_PATTERNS } from "./constants.js"
+import { TRIGGERS, MEDIA_URL_PATTERNS } from "./constants.js";
 
-const hostId = chrome.runtime.id;
+
 let socket = null;
-let SESSION_IDENTITY = null
-const ACTIVE_TAB = new Map();
+let SESSION_IDENTITY = null;
+const REMOTE_CONTEXT = new Map();
+let connected = false;
 
-function GENERATE_SESSION_IDENTITY() {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
-}
-
-function GET_SESSION_IDENTITY() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(["SESSION_IDENTITY"], (result) => {
-      if (result.SESSION_IDENTITY) {
-        resolve(result.SESSION_IDENTITY);
-      } else {
-        const newCode = GENERATE_SESSION_IDENTITY();
-        chrome.storage.local.set({ SESSION_IDENTITY: newCode }, () => {
-          resolve(newCode);
-        });
-      }
-    });
+function setConnectedState(state) {
+  connected = state;
+  chrome.action.setBadgeText({
+    text: state ? "ON" : ""
+  });
+  chrome.action.setBadgeBackgroundColor({
+    color: state ? "#16a34a" : "#64748b"
   });
 }
 
+function onConnected(sessionId) {
+  setConnectedState(true);
+  SESSION_IDENTITY = sessionId;
+}
 
-async function GET_MEDIA_TABS() {
+function onDisconnected() {
+  setConnectedState(false);
+  SESSION_IDENTITY = null;
+}
+
+chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
+  if (msg.type === "POPUP_GET_STATUS") {
+    sendResponse({
+      connected,
+      sessionIdentity: SESSION_IDENTITY
+    });
+    return true;
+  }
+
+  if (msg.type === "POPUP_DISCONNECT") {
+    if (socket) socket.close();
+    onDisconnected();
+    sendResponse({ ok: true });
+    return true;
+  }
+});
+
+
+function isValidControlAction(action) {
+  return action === "TOGGLE_PLAYBACK";
+}
+
+async function getMediaTabs() {
   const tabs = await chrome.tabs.query({});
   return tabs
-    .filter(tab => tab.url && MEDIA_URL_PATTERNS.some(p => tab.url.includes(p)))
+    .filter(tab =>
+      tab.url &&
+      MEDIA_URL_PATTERNS.some(p => tab.url.includes(p))
+    )
     .map(tab => ({
       tabId: tab.id,
       title: tab.title,
@@ -37,74 +63,96 @@ async function GET_MEDIA_TABS() {
     }));
 }
 
-async function CONNECT_WEBSOCKET() {
-  SESSION_IDENTITY = await GET_SESSION_IDENTITY();
+
+function connectWebSocket() {
   socket = new WebSocket("ws://localhost:3001");
 
   socket.onopen = () => {
     socket.send(JSON.stringify({
-      type: TRIGGERS.REGISTER_HOST,
-      SESSION_IDENTITY,
-      hostId: hostId
-    })
-    );
+      type: TRIGGERS.REGISTER_HOST
+    }));
   };
 
   socket.onmessage = async (event) => {
-    let response;
+    let msg;
     try {
-      response = JSON.parse(event.data);
+      msg = JSON.parse(event.data);
     } catch {
       return;
     }
 
-    if (!response?.type) return;
+    if (!msg?.type) return;
 
-    if (response.type === TRIGGERS.REMOTE_JOIN_REQUEST) {
-      console.log(response.deviceId)
-      socket.send(JSON.stringify({
-        type: TRIGGERS.REMOTE_APPROVED,
-        deviceId: response.deviceId
-      }))
+    switch (msg.type) {
+
+      case TRIGGERS.HOST_REGISTERED: {
+        onConnected(msg.SESSION_IDENTITY);
+        chrome.storage.local.set({ SESSION_IDENTITY: msg.SESSION_IDENTITY });
+        break;
+      }
+
+
+      case TRIGGERS.REMOTE_JOINED: {
+        const { remoteId } = msg;
+        REMOTE_CONTEXT.set(remoteId, { tabId: null });
+
+        const tabs = await getMediaTabs();
+        socket.send(JSON.stringify({
+          type: TRIGGERS.MEDIA_TABS_LIST,
+          remoteId,
+          tabs
+        }));
+        break;
+      }
+
+      case TRIGGERS.SELECT_ACTIVE_TAB: {
+        const { remoteId, tabId } = msg;
+        if (!REMOTE_CONTEXT.has(remoteId)) return;
+
+        const tab = await chrome.tabs.get(tabId).catch(() => null);
+        if (!tab) return;
+
+        REMOTE_CONTEXT.get(remoteId).tabId = tabId;
+        break;
+      }
+
+      case TRIGGERS.CONTROL_EVENT: {
+        const { remoteId, action } = msg;
+        if (!isValidControlAction(action)) return;
+
+        const ctx = REMOTE_CONTEXT.get(remoteId);
+        if (!ctx?.tabId) return;
+
+        chrome.tabs.sendMessage(ctx.tabId, {
+          type: TRIGGERS.CONTROL_EVENT,
+          action
+        });
+        break;
+      }
+
+      case TRIGGERS.PAIR_INVALID: {
+        REMOTE_CONTEXT.clear();
+        SESSION_IDENTITY = null;
+        break;
+      }
+
     }
-    if (response.type === TRIGGERS.REMOTE_JOINED) {
-      const mediaTabs = await GET_MEDIA_TABS();
-      socket.send(JSON.stringify({
-        type: TRIGGERS.MEDIA_TABS_LIST,
-        deviceId: response.deviceId,
-        tabs: mediaTabs
-      }));
-    }
-    if (response.type === TRIGGERS.SELECT_ACTIVE_TAB) {
-      ACTIVE_TAB.set(response.deviceId, response.tabId);
-    }
-    if (response.type === TRIGGERS.CONTROL_EVENT) {
-      const tabId = ACTIVE_TAB.get(response.deviceId);
-      if (!tabId) return;
-      chrome.tabs.sendMessage(tabId, response);
-    }
-    if (response.type === TRIGGERS.PAIR_INVALID) {
-      console.warn("Pair invalid:", response.reason);
-    }
-  }
+  };
 
   socket.onclose = () => {
     socket = null;
-    setTimeout(CONNECT_WEBSOCKET, 1000);
+    onDisconnected();
+    REMOTE_CONTEXT.clear();
+    setTimeout(connectWebSocket, 1000);
   };
 }
 
-CONNECT_WEBSOCKET();
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type !== TRIGGERS.STATE_UPDATE) return;
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.type === TRIGGERS.STATE_UPDATE) {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(msg));
-    }
-  }
-  if (msg.type === TRIGGERS.GET_SESSION_IDENTITY) {
-    sendResponse({ SESSION_IDENTITY });
-    return true;
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify(msg));
   }
 });
 
+connectWebSocket();
