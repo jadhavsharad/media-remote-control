@@ -27,10 +27,7 @@ function reportState(video) {
   lastReportedState = state;
 
   try {
-    chrome.runtime.sendMessage({
-      type: "STATE_UPDATE",
-      state
-    });
+    chrome.runtime.sendMessage({type: "FROM_CONTENT_SCRIPT", update: {  type: "STATE_UPDATE",  state},});
   } catch {
   }
 }

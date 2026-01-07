@@ -5,7 +5,8 @@
   "version": "0.1",
   "permissions": [
     "tabs",
-    "storage"
+    "storage",
+    "offscreen"
   ],
   "host_permissions": [
     "*://*.youtube.com/*",

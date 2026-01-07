@@ -2,8 +2,7 @@ const statusEl = document.getElementById("status");
 const sessionEl = document.getElementById("session");
 const disconnectBtn = document.getElementById("disconnect");
 
-chrome.runtime.sendMessage(
-  { type: "POPUP_GET_STATUS" },
+chrome.runtime.sendMessage({ type: "FROM_POPUP", popup: { type: "POPUP_GET_STATUS" } },
   (response) => {
     if (!response) {
       statusEl.textContent = "Status: Unavailable";
@@ -26,7 +25,7 @@ chrome.runtime.sendMessage(
 );
 
 disconnectBtn.addEventListener("click", () => {
-  chrome.runtime.sendMessage({ type: "POPUP_DISCONNECT" }, () => {
+  chrome.runtime.sendMessage({ type: "FROM_POPUP", popup:{ type: "POPUP_DISCONNECT" }}, () => {
     window.close();
   });
 });

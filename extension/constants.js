@@ -15,7 +15,11 @@ const TRIGGERS = Object.freeze({
     ROLE: {
         HOST: 'HOST',
         REMOTE: 'REMOTE',
-    }
+    },
+    FROM_SERVER: 'FROM_SERVER',
+    FROM_BACKGROUND: 'FROM_BACKGROUND',           
+    FROM_CONTENT_SCRIPT: 'FROM_CONTENT_SCRIPT',
+    FROM_POPUP: "FROM_POPUP"
 });
 
 const TAB_ACTIVITY = Object.freeze({
