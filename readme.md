@@ -44,13 +44,8 @@ This project allows you to:
 ## 2. Components Overview
 
 - **Extension**: Owns browser state and media control
-    - **[Readme](extension/readme.md)**
 - **Server**: Manages sessions and message routing
-    - **[Readme](server/readme.md)**
 - **Remote UI**: Displays tabs and sends control actions
-    - **[Readme](client/readme.md)**
-
-> Each directory contains its own README explaining responsibilities and flow.
 
 ---
 ## 3. Architecture flow
