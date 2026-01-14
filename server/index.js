@@ -251,7 +251,6 @@ function routeMessage(ws, msg) {
   if (!session) return;
 
   if (ws.role === PROTOCOL.ROLE.REMOTE) {
-    if (!Object.values(PROTOCOL.CONTROL).includes(msg.type)) return;
 
     if (isOpen(session.socket)) {
       session.socket.send(JSON.stringify({

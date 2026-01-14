@@ -1,6 +1,12 @@
 const statusEl = document.getElementById("status");
 const sessionEl = document.getElementById("session");
 const disconnectBtn = document.getElementById("disconnect");
+const pairBtn = document.getElementById("pair-btn");
+const pairContainer = document.getElementById("pair-container");
+const qrcodeEl = document.getElementById("qrcode");
+const codeTextEl = document.getElementById("code-text");
+
+let qrcodeObj = null;
 
 chrome.runtime.sendMessage({ type: "FROM_POPUP", popup: { type: "POPUP_GET_STATUS" } },
   (response) => {
@@ -12,20 +18,59 @@ chrome.runtime.sendMessage({ type: "FROM_POPUP", popup: { type: "POPUP_GET_STATU
     const { connected, sessionIdentity } = response;
 
     if (connected) {
-      statusEl.textContent = "Status: Remote control active";
-      sessionEl.textContent = `Session: ${sessionIdentity}`;
+      statusEl.textContent = "Status: Host Active";
+      sessionEl.textContent = `Session: Active`;
 
       disconnectBtn.disabled = false;
       disconnectBtn.classList.remove("inactive");
+      pairBtn.disabled = false;
+      pairBtn.classList.remove("inactive");
     } else {
       statusEl.textContent = "Status: Disconnected";
       sessionEl.textContent = "Session: —";
+      pairBtn.disabled = true;
+      pairBtn.classList.add("inactive");
     }
   }
 );
 
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === "TO_POPUP" && msg.payload.type === "PAIR_CODE_RECEIVED") {
+    renderQRCode(msg.payload.code);
+  }
+});
+
+pairBtn.addEventListener("click", () => {
+  pairBtn.textContent = "Generating Code...";
+  pairBtn.disabled = true;
+
+  chrome.runtime.sendMessage({
+    type: "FROM_POPUP",
+    popup: { type: "POPUP_REQUEST_CODE" }
+  }, (res) => {
+    console.log(res)
+  });
+});
+
 disconnectBtn.addEventListener("click", () => {
-  chrome.runtime.sendMessage({ type: "FROM_POPUP", popup:{ type: "POPUP_DISCONNECT" }}, () => {
+  chrome.runtime.sendMessage({ type: "FROM_POPUP", popup: { type: "POPUP_DISCONNECT" } }, () => {
     window.close();
   });
 });
+
+function renderQRCode(code) {
+  pairContainer.style.display = "block";
+  qrcodeEl.innerHTML = "";
+  codeTextEl.textContent = code;
+
+  new QRCode(qrcodeEl, {
+    text: code,
+    width: 128,
+    height: 128,
+    colorDark: "#ffffff",
+    colorLight: "#0f172a",
+    correctLevel: QRCode.CorrectLevel.H
+  });
+
+  pairBtn.style.display = "none";
+}

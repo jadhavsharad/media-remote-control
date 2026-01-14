@@ -61,9 +61,18 @@ chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
 async function handleServerMessage(msg) {
   console.log(msg)
   if (!msg?.type) return;
-  if (msg.type === "WS_CLOSED") return;
+  if (msg.type === "WS_CLOSED") {
+    setConnectedState(false);
+    return;
+  }
+
 
   switch (msg.type) {
+    case "WS_OPEN": {
+      sendToServer({ type: SESSION_EVENTS.REGISTER_HOST });
+      break;
+    }
+
     case SESSION_EVENTS.HOST_REGISTERED: {
       onConnected(msg.SESSION_IDENTITY);
       break;
@@ -78,6 +87,7 @@ async function handleServerMessage(msg) {
     }
 
     case SESSION_EVENTS.REMOTE_JOINED: {
+      remoteContext.delete(msg.remoteId);
       remoteContext.set(msg.remoteId, { tabId: null });
       const tabs = await getMediaTabs()
       sendToServer({
@@ -95,6 +105,7 @@ async function handleServerMessage(msg) {
       if (!tab) return;
 
       ctx.tabId = msg.tabId;
+      console.log(ctx.tabId)
       break;
     }
     case CONTROL_EVENTS.CONTROL_EVENT: {
@@ -110,8 +121,10 @@ async function handleServerMessage(msg) {
       break;
     }
     case SESSION_EVENTS.HOST_DISCONNECTED: {
+      resetSession("host_disconnected");
       break;
     }
+
     case SESSION_EVENTS.PAIR_INVALID: {
       remoteContext.clear();
       break;
@@ -141,12 +154,11 @@ function handlePopup(req, sendResponse) {
 }
 
 async function sendToServer(payload) {
+  await ensureOffscreen();
   chrome.runtime.sendMessage({
     type: CHANNELS.FROM_BACKGROUND,
     payload
-  }).catch(err => {
-     console.log(err)
-  });
+  }).catch(console.warn);
 }
 
 async function ensureOffscreen() {
@@ -158,5 +170,12 @@ async function ensureOffscreen() {
     justification: "Persistent WebSocket connection"
   });
 }
+
+function resetSession(reason = "unknown") {
+  console.warn("Session reset:", reason);
+  onDisconnected();
+  remoteContext.clear();
+}
+
 
 ensureOffscreen();
