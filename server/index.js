@@ -16,6 +16,7 @@ const CLEANUP_INTERVAL_MS = 30_000;
 const hostSessions = new Map();
 const pairCodes = new Map();
 const remoteIdentities = new Map();
+const hostTokenMap = new Map();
 
 function generateUUID() {
   return crypto.randomUUID();
@@ -48,6 +49,8 @@ function isValidMessage(msg) {
   return ALL_TYPES.includes(msg.type);
 }
 
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 Hours
+
 setInterval(() => {
   const t = now();
   for (const [code, sessionId] of pairCodes.entries()) {
@@ -57,6 +60,24 @@ setInterval(() => {
       if (session && session.pairCode === code) {
         session.pairCode = null;
         session.pairCodeExpiresAt = 0;
+      }
+    }
+  }
+
+  for (const [sessionId, session] of hostSessions.entries()) {
+    if (!session.socket && session.hostDisconnectedAt && (t - session.hostDisconnectedAt > SESSION_TTL_MS)) {
+      console.log(`[CLEANUP] Removing abandoned session ${sessionId}`);
+      for (const identity of session.remotes.values()) {
+        if (identity.socket && isOpen(identity.socket)) {
+          identity.socket.close();
+        }
+        if (identity.trustToken) {
+          remoteIdentities.delete(identity.trustToken);
+        }
+      }
+      hostSessions.delete(sessionId);
+      if (session.hostToken) {
+        hostTokenMap.delete(session.hostToken);
       }
     }
   }
@@ -86,6 +107,7 @@ wss.on("connection", (ws) => {
   ws.sessionId = null;
   ws.remoteIdentityId = null;
   ws.lastSeenAt = 0;
+  ws.trustToken = null;
 
   ws.on("pong", () => (ws.isAlive = true));
 
@@ -119,20 +141,56 @@ function handleAuth(ws, msg) {
   const t = now();
 
   if (msg.type === PROTOCOL.SESSION.REGISTER_HOST) {
-    const sessionId = generateUUID();
+    const existingHostToken = msg.hostToken;
+    let session = null;
+    let sessionId = null;
+    let hostToken = null;
+
+    if (existingHostToken) {
+      sessionId = hostTokenMap.get(existingHostToken);
+      if (sessionId) {
+        session = hostSessions.get(sessionId);
+      }
+
+      if (session) {
+        console.log(`[RECOVERY] Host re-connected to session ${sessionId}`);
+        if (session.socket && isOpen(session.socket) && session.socket !== ws) {
+          console.warn(`[RECOVERY] Closing old ghost socket for session ${sessionId}`);
+          session.socket.close();
+        }
+
+        session.socket = ws;
+        session.hostDisconnectedAt = null;
+        hostToken = existingHostToken;
+      } else {
+        console.warn("[RECOVERY] Invalid hostToken, creating new session");
+      }
+    }
+
+    if (!session) {
+      sessionId = generateUUID();
+      hostToken = generateUUID();
+      console.log(`[NEW] Created new host session ${sessionId}`);
+
+      session = {
+        socket: ws,
+        hostToken,
+        remotes: new Map(),
+        pairCode: null,
+        pairCodeExpiresAt: 0,
+        hostDisconnectedAt: null
+      };
+      hostSessions.set(sessionId, session);
+      hostTokenMap.set(hostToken, sessionId);
+    }
+
     ws.role = PROTOCOL.ROLE.HOST;
     ws.sessionId = sessionId;
-
-    hostSessions.set(sessionId, {
-      socket: ws,
-      remotes: new Map(), 
-      pairCode: null,
-      pairCodeExpiresAt: 0,
-    });
 
     ws.send(JSON.stringify({
       type: PROTOCOL.SESSION.HOST_REGISTERED,
       SESSION_IDENTITY: sessionId,
+      hostToken: hostToken
     }));
     return true;
   }
@@ -183,10 +241,11 @@ function handleAuth(ws, msg) {
       socket: null,
       expiresAt: t + TRUST_TOKEN_TTL_MS,
       revoked: false,
+      trustToken,
     };
 
     remoteIdentities.set(trustToken, identity);
-    attachRemoteSocket(ws, identity);
+    attachRemoteSocket(ws, identity, trustToken);
 
     ws.send(JSON.stringify({
       type: PROTOCOL.SESSION.PAIR_SUCCESS,
@@ -211,7 +270,7 @@ function handleAuth(ws, msg) {
       return true;
     }
 
-    attachRemoteSocket(ws, identity);
+    attachRemoteSocket(ws, identity, trustToken);
 
     ws.send(JSON.stringify({
       type: PROTOCOL.SESSION.SESSION_VALID,
@@ -224,7 +283,7 @@ function handleAuth(ws, msg) {
   return false;
 }
 
-function attachRemoteSocket(ws, identity) {
+function attachRemoteSocket(ws, identity, trustToken) {
   if (identity.socket && isOpen(identity.socket)) {
     identity.socket.close();
   }
@@ -234,6 +293,7 @@ function attachRemoteSocket(ws, identity) {
   ws.role = PROTOCOL.ROLE.REMOTE;
   ws.sessionId = identity.sessionId;
   ws.remoteIdentityId = identity.id;
+  ws.trustToken = trustToken;
 
   const session = hostSessions.get(identity.sessionId);
   session.remotes.set(identity.id, identity);
@@ -250,7 +310,9 @@ function routeMessage(ws, msg) {
   const session = hostSessions.get(ws.sessionId);
   if (!session) return;
 
+
   if (ws.role === PROTOCOL.ROLE.REMOTE) {
+    if (!isValidMessage(msg)) return;
 
     if (isOpen(session.socket)) {
       session.socket.send(JSON.stringify({
@@ -263,16 +325,24 @@ function routeMessage(ws, msg) {
   if (ws.role === PROTOCOL.ROLE.HOST) {
     if (msg.remoteId) {
       const identity = session.remotes.get(msg.remoteId);
-      if (identity && identity.socket && isOpen(identity.socket)) {
-        identity.socket.send(JSON.stringify(msg));
+      if (identity && identity.socket) {
+        safeSend(identity.socket, msg);
       }
     } else {
       for (const identity of session.remotes.values()) {
-        if (identity.socket && isOpen(identity.socket)) {
-          identity.socket.send(JSON.stringify(msg));
-        }
+        if (identity.socket) safeSend(identity.socket, msg);
       }
     }
+  }
+}
+
+function safeSend(ws, payload) {
+  try {
+    if (isOpen(ws)) {
+      ws.send(JSON.stringify(payload));
+    }
+  } catch (e) {
+    console.error("[WS_SEND_ERROR]", e);
   }
 }
 
@@ -281,27 +351,31 @@ function cleanupSocket(ws) {
     const session = hostSessions.get(ws.sessionId);
     if (!session) return;
 
+    console.log(`[DISCONNECT] Host disconnected from session ${ws.sessionId}`);
+
+    if (session.socket === ws) {
+      session.socket = null;
+      session.hostDisconnectedAt = now();
+    }
+
     for (const identity of session.remotes.values()) {
       if (identity.socket && isOpen(identity.socket)) {
-        identity.socket.close();
+        identity.socket.send(JSON.stringify({
+          type: PROTOCOL.SESSION.HOST_DISCONNECTED
+        }));
       }
     }
 
-    for (const identity of remoteIdentities.values()) {
-      if (identity.sessionId === ws.sessionId) {
-        identity.revoked = true;
-      }
-    }
-
-    hostSessions.delete(ws.sessionId);
   }
 
-  if (ws.role === PROTOCOL.ROLE.REMOTE && ws.remoteIdentityId) {
-    for (const identity of remoteIdentities.values()) {
-      if (identity.id === ws.remoteIdentityId) {
-        identity.socket = null;
-      }
+  if (ws.role === PROTOCOL.ROLE.REMOTE && ws.trustToken) {
+    const identity = remoteIdentities.get(ws.trustToken);
+    if (identity && identity.socket === ws) {
+      identity.socket = null;
     }
+  } else if (ws.role === PROTOCOL.ROLE.REMOTE && !ws.trustToken) {
+    // Fallback if somehow trustToken is missing but this shouldn't happen with new logic
+    // Keeping this empty or basic logging is fine.
   }
 }
 
