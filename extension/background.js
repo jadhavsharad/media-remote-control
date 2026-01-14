@@ -11,10 +11,10 @@ function setConnectedState(state) {
   chrome.action.setBadgeBackgroundColor({ color: state ? "#16a34a" : "#64748b" });
 }
 
-function onConnected(sessionId) {
+function onConnected(sessionId, hostToken) {
   sessionIdentity = sessionId;
   setConnectedState(true);
-  chrome.storage.local.set({ sessionIdentity, connected: true });
+  chrome.storage.local.set({ sessionIdentity, hostToken, connected: true });
 }
 
 function onDisconnected() {
@@ -69,12 +69,18 @@ async function handleServerMessage(msg) {
 
   switch (msg.type) {
     case "WS_OPEN": {
-      sendToServer({ type: SESSION_EVENTS.REGISTER_HOST });
+      chrome.storage.local.get(["hostToken"], (res) => {
+        const hostToken = res.hostToken;
+        sendToServer({
+          type: SESSION_EVENTS.REGISTER_HOST,
+          hostToken: hostToken
+        });
+      });
       break;
     }
 
     case SESSION_EVENTS.HOST_REGISTERED: {
-      onConnected(msg.SESSION_IDENTITY);
+      onConnected(msg.SESSION_IDENTITY, msg.hostToken);
       break;
     }
 

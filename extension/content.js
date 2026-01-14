@@ -27,7 +27,7 @@ function reportState(video) {
   lastReportedState = state;
 
   try {
-    chrome.runtime.sendMessage({type: "FROM_CONTENT_SCRIPT", update: {  type: "STATE_UPDATE",  state},});
+    chrome.runtime.sendMessage({ type: "FROM_CONTENT_SCRIPT", update: { type: "STATE_UPDATE", state }, });
   } catch {
   }
 }
@@ -79,19 +79,12 @@ function discoverVideo() {
   attachVideo(candidate);
 }
 
-function startObserver() {
-  if (observer) return;
-
-  observer = new MutationObserver(() => {
-    discoverVideo();
-  });
-
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
-
+function startPolling() {
   discoverVideo();
+
+  setInterval(() => {
+    discoverVideo();
+  }, 2000);
 }
 
 chrome.runtime.onMessage.addListener((msg) => {
@@ -114,8 +107,9 @@ chrome.runtime.onMessage.addListener((msg) => {
           : currentVideo.pause();
         break;
     }
-  } catch {
+  } catch (err) {
+    console.error("Control Event Error:", err);
   }
 });
 
-startObserver();
+startPolling();
