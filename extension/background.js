@@ -1,4 +1,4 @@
-import { TRIGGERS, MEDIA_URL_PATTERNS, CHANNELS, SESSION_EVENTS, MEDIA_EVENTS, CONTROL_EVENTS } from "./constants.js";
+import { MEDIA_URL_PATTERNS, CHANNELS, SESSION_EVENTS, MEDIA_EVENTS, CONTROL_EVENTS } from "./constants.js";
 
 let sessionIdentity = null;
 let connected = false;
@@ -11,10 +11,10 @@ function setConnectedState(state) {
   chrome.action.setBadgeBackgroundColor({ color: state ? "#16a34a" : "#64748b" });
 }
 
-function onConnected(sessionId) {
+function onConnected(sessionId, hostToken) {
   sessionIdentity = sessionId;
   setConnectedState(true);
-  chrome.storage.local.set({ sessionIdentity, connected: true });
+  chrome.storage.local.set({ sessionIdentity, hostToken, connected: true });
 }
 
 function onDisconnected() {
@@ -22,7 +22,7 @@ function onDisconnected() {
   connected = false;
   setConnectedState(false);
   chrome.storage.local.set({ sessionIdentity: null, connected: false });
-
+  remoteContext.clear();
 }
 
 
@@ -59,14 +59,41 @@ chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
 });
 
 async function handleServerMessage(msg) {
+  console.log(msg)
   if (!msg?.type) return;
-  if (msg.type === "WS_CLOSED") return;
+  if (msg.type === "WS_CLOSED") {
+    setConnectedState(false);
+    return;
+  }
+
+
   switch (msg.type) {
-    case SESSION_EVENTS.HOST_REGISTERED: {
-      onConnected(msg.SESSION_IDENTITY);
+    case "WS_OPEN": {
+      chrome.storage.local.get(["hostToken"], (res) => {
+        const hostToken = res.hostToken;
+        sendToServer({
+          type: SESSION_EVENTS.REGISTER_HOST,
+          hostToken: hostToken
+        });
+      });
       break;
     }
+
+    case SESSION_EVENTS.HOST_REGISTERED: {
+      onConnected(msg.SESSION_IDENTITY, msg.hostToken);
+      break;
+    }
+
+    case SESSION_EVENTS.PAIR_CODE: {
+      chrome.runtime.sendMessage({
+        type: "TO_POPUP",
+        payload: { type: "PAIR_CODE_RECEIVED", code: msg.code, ttl: msg.ttl }
+      }).catch(() => { });
+      break;
+    }
+
     case SESSION_EVENTS.REMOTE_JOINED: {
+      remoteContext.delete(msg.remoteId);
       remoteContext.set(msg.remoteId, { tabId: null });
       const tabs = await getMediaTabs()
       sendToServer({
@@ -84,6 +111,7 @@ async function handleServerMessage(msg) {
       if (!tab) return;
 
       ctx.tabId = msg.tabId;
+      console.log(ctx.tabId)
       break;
     }
     case CONTROL_EVENTS.CONTROL_EVENT: {
@@ -98,12 +126,15 @@ async function handleServerMessage(msg) {
       });
       break;
     }
-    case SESSION_EVENTS.PAIR_INVALID: {
-      remoteContext.clear();
-      onDisconnected();
+    case SESSION_EVENTS.HOST_DISCONNECTED: {
+      resetSession("host_disconnected");
       break;
     }
 
+    case SESSION_EVENTS.PAIR_INVALID: {
+      remoteContext.clear();
+      break;
+    }
   }
 }
 
@@ -112,20 +143,28 @@ function handlePopup(req, sendResponse) {
     chrome.storage.local.get(["sessionIdentity", "connected"], res => {
       sendResponse(res);
     });
+    return;
+  }
+
+  if (req.type === "POPUP_REQUEST_CODE") {
+    sendToServer({ type: SESSION_EVENTS.REQUEST_PAIR_CODE });
+    sendResponse({ ok: true });
+    return;
   }
 
   if (req.type === "POPUP_DISCONNECT") {
     onDisconnected();
-    sendToServer({ type: "LEAVE_PAIR" });
     sendResponse({ ok: true });
+    return;
   }
 }
 
 async function sendToServer(payload) {
+  await ensureOffscreen();
   chrome.runtime.sendMessage({
     type: CHANNELS.FROM_BACKGROUND,
     payload
-  });
+  }).catch(console.warn);
 }
 
 async function ensureOffscreen() {
@@ -137,4 +176,12 @@ async function ensureOffscreen() {
     justification: "Persistent WebSocket connection"
   });
 }
+
+function resetSession(reason = "unknown") {
+  console.warn("Session reset:", reason);
+  onDisconnected();
+  remoteContext.clear();
+}
+
+
 ensureOffscreen();

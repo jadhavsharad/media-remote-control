@@ -1,60 +1,73 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="UTF-8" />
-    <style>
-      body {
-        font-family: system-ui, -apple-system, BlinkMacSystemFont;
-        background: #0f172a;
-        color: white;
-        margin: 0;
-        padding: 12px;
-        width: 240px;
-      }
 
-      .status {
-        font-size: 12px;
-        color: #94a3b8;
-        margin-bottom: 8px;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont;
+      background: #0f172a;
+      color: white;
+      margin: 0;
+      padding: 12px;
+      width: 240px;
+    }
 
-      .session {
-        font-size: 14px;
-        font-weight: 600;
-        margin-bottom: 12px;
-        word-break: break-all;
-      }
+    .status {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-bottom: 8px;
+    }
 
-      button {
-        width: 100%;
-        padding: 8px;
-        border-radius: 6px;
-        border: none;
-        cursor: pointer;
-        font-size: 14px;
-      }
+    .session {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      word-break: break-all;
+    }
 
-      .disconnect {
-        background: #dc2626;
-        color: white;
-      }
+    button {
+      width: 100%;
+      padding: 8px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+    }
 
-      .inactive {
-        background: #334155;
-        cursor: not-allowed;
-      }
-    </style>
-  </head>
+    .disconnect {
+      background: #dc2626;
+      color: white;
+    }
 
-  <body>
-    <div class="status" id="status">Status: Disconnected</div>
+    .inactive {
+      background: #334155;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
 
-    <div class="session" id="session">Session: —</div>
+<body>
+  <div class="status" id="status">Status: Disconnected</div>
+  <div class="session" id="session">Session: —</div>
 
-    <button id="disconnect" class="inactive" disabled>
-      Disconnect
-    </button>
+  <div id="pair-container" style="display: none; margin-bottom: 12px; text-align: center;">
+    <div id="qrcode" style="margin: 0 auto 8px auto;"></div>
+    <div id="code-text"
+      style="font-family: monospace; font-size: 18px; letter-spacing: 2px; font-weight: bold; color: #fbbf24;"></div>
+    <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">Tap to Scan on Phone</div>
+  </div>
 
-    <script src="popup.js"></script>
-  </body>
+  <button id="pair-btn" style="background: #2563eb; margin-bottom: 8px;">
+    Pair New Device
+  </button>
+
+  <button id="disconnect" class="inactive" disabled>
+    Disconnect
+  </button>
+
+  <script src="libs/qrcode.min.js"></script>
+  <script src="popup.js"></script>
+</body>
+
 </html>
