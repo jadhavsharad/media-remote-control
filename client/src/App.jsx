@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Html5QrcodeScanner } from "html5-qrcode";
 
-const WS_URL = "ws://10.134.24.59:3001";
+const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:3001";
 const RECONNECT_DELAY = 2000;
 
 const MSG = {
@@ -22,13 +22,12 @@ const MSG = {
 };
 
 export default function App() {
-  const [trustToken, setTrustToken] = useState(() =>
+  const [, setTrustToken] = useState(() =>
     localStorage.getItem("trust_token")
   );
 
   // Status: Disconnected | Connecting | Verifying | Scanning | Paired | Waiting
   const [status, setStatus] = useState("Disconnected");
-
   const [mediaTabs, setMediaTabs] = useState([]);
   const [selectedTabId, setSelectedTabId] = useState(null);
   const [playbackState, setPlaybackState] = useState("Play");
@@ -147,14 +146,14 @@ export default function App() {
     };
   }, []);
 
-  const onScanSuccess = (decodedText) => {
+  const onScanSuccess = useCallback((decodedText) => {
     if (!decodedText) return;
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       send({ type: MSG.EXCHANGE_PAIR_CODE, code: decodedText, });
       setStatus("Verifying");
     }
-  };
+  }, [send]);
 
   const handleDisconnect = () => {
     localStorage.removeItem("trust_token");
@@ -194,7 +193,7 @@ export default function App() {
       if (scannerRef.current) scannerRef.current.clear().catch(() => { });
       scannerRef.current = null;
     }
-  }, [status]);
+  }, [status, onScanSuccess]);
 
   return (
     <div className="bg-zinc-950 min-h-screen text-white flex items-center justify-center p-4">
@@ -203,12 +202,12 @@ export default function App() {
         {/* Header */}
         <div className="flex justify-between items-center border-b border-zinc-800 pb-4">
           <h1 className="text-xl font-bold">Remote Control</h1>
-          <span className="text-xs text-zinc-400 uppercase">{status}</span>
+          <span className="text-xs text-zinc-400 uppercase" data-testid="status-indicator">{status}</span>
         </div>
 
         {/* Scanning */}
         {status === "Scanning" && (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4" data-testid="scanner-container">
             <div className="text-center text-sm text-zinc-400">
               Scan QR code from extension
             </div>
@@ -218,7 +217,7 @@ export default function App() {
 
         {/* Connecting / Verifying */}
         {(status === "Connecting" || status === "Verifying") && (
-          <div className="flex flex-col items-center gap-4 py-12">
+          <div className="flex flex-col items-center gap-4 py-12" data-testid="loading-container">
             <div className="animate-spin h-8 w-8 border-4 border-zinc-700 border-t-zinc-400 rounded-full" />
             <div className="text-sm uppercase">{status}</div>
           </div>
@@ -226,11 +225,12 @@ export default function App() {
 
         {/* Paired */}
         {status === "Paired" && (
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-6" data-testid="paired-container">
             <div className="flex justify-end">
               <button
                 onClick={handleDisconnect}
                 className="text-xs text-red-400 bg-red-500/10 px-3 py-1 rounded-full"
+                data-testid="unpair-btn"
               >
                 Unpair
               </button>
@@ -257,6 +257,7 @@ export default function App() {
               disabled={!selectedTabId}
               onClick={handleTogglePlayback}
               className="h-14 rounded-xl bg-zinc-800 disabled:opacity-30"
+              data-testid="play-pause-btn"
             >
               {playbackState === "Play" ? "▶ Play" : "⏸ Pause"}
             </button>
