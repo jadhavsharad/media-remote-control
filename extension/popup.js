@@ -56,7 +56,7 @@ pairBtn.addEventListener("click", () => {
     type: "FROM_POPUP",
     popup: { type: "POPUP_REQUEST_CODE" }
   }, (res) => {
-    console.log(res)
+
   });
 });
 

@@ -42,7 +42,7 @@ export default function App() {
 
   const handleMessage = (msg) => {
     if (!msg?.type) return;
-    console.log(msg)
+
     match(msg)
       .with({ type: MSG.PAIR_SUCCESS }, (m) => {
         localStorage.setItem("trust_token", m.trustToken);

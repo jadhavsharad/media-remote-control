@@ -124,7 +124,7 @@ chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
 });
 
 async function handleServerMessage(msg) {
-  console.log(msg)
+
   if (!msg?.type) return;
   if (msg.type === "WS_CLOSED") {
     setConnectedState(false);
@@ -203,7 +203,7 @@ async function handleServerMessage(msg) {
       if (!tab) return;
 
       ctx.tabId = msg.tabId;
-      console.log(ctx.tabId)
+
       break;
     }
     case CONTROL_EVENTS.CONTROL_EVENT: {
