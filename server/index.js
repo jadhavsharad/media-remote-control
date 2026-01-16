@@ -7,6 +7,7 @@ const PROTOCOL = require("./constants.js");
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
+const PORT = process.env.PORT || 3000;
 
 const PAIR_CODE_TTL_MS = 60 * 1000; // 60 seconds
 const TRUST_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -393,7 +394,7 @@ function cleanupSocket(ws) {
 app.get("/", (_, res) => res.send("Secure Server Running"));
 
 if (require.main === module) {
-  server.listen(3001, () => console.log("🚀 Secure server listening on :3001"));
+  server.listen(PORT, () => console.log("🚀 Secure server listening on :3001"));
 }
 
 module.exports = {
