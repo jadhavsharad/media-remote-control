@@ -4,7 +4,7 @@ import { TRIGGERS, CHANNELS } from "./constants.js";
 let socket = null;
 let reconnect = null;
 let userDisconnected = false; // Prevents auto-reconnect after user disconnect
-const WS_URL = "ws://media-remote-control-service.onrender.com";
+const WS_URL = "wss://media-remote-control-service.onrender.com";
 
 function connect() {
     socket = new WebSocket(WS_URL);
