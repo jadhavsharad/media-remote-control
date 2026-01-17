@@ -10,9 +10,7 @@
     "scripting"
   ],
   "host_permissions": [
-    "*://*.youtube.com/*",
-    "*://*.netflix.com/*",
-    "*://*.primevideo.com/*"
+    "*://*.youtube.com/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -21,9 +19,7 @@
   "content_scripts": [
     {
       "matches": [
-        "*://*.youtube.com/*",
-        "*://*.netflix.com/*",
-        "*://*.primevideo.com/*"
+        "*://*.youtube.com/*"
       ],
       "js": [
         "content.js"
