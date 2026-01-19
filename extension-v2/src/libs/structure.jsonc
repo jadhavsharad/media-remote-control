@@ -1,0 +1,335 @@
+// {
+//     "init": {
+//         "host_register": {
+//             "type": "", // string [host]
+//             "device_info": {
+//                 "os": "", // string
+//                 "browser": "" //string
+//             },
+//             "register": true // boolean
+//         }, // object
+//         "host_registered": {
+//             "type": "", // string [server]
+//             "host_token": {
+//                 "token": "", // string
+//                 "time_to_live": "" // number or string [30 days]
+//             }, //string
+//             "session": "", // string
+//             "registered": true // boolean
+//         }, // object
+//         "pairing_key_request": {
+//             "type": "", // string [host]
+//             "host_token": "" // string
+//         }, // object
+//         "pairing_key": {
+//             "type": "", // string [server]
+//             "pairing_key": "" // string
+//         }, // object
+//         "pairing_key_exchange": {
+//             // exchange
+//             "pairing_key": {
+//                 "type": "", // string [remote]
+//                 "key": "", // string
+//                 "device_info": {
+//                     "os": "", // string
+//                     "browser": "" // string
+//                 } // object
+//             }, // object
+//             // if invalid
+//             "pairing_key_invalid": {
+//                 "type": "", // string [server]
+//                 "pairing_key_invalid": true // boolean
+//             }, // object
+//             // if valid
+//             "pairing_key_valid": {
+//                 "type": "", // string [server]
+//                 "paired": true, // boolean
+//                 "remote_token": {
+//                     "token": "", // string                    
+//                     "time_to_live": "" // number or string [30 days]
+//                 }, // object
+//                 "session": "", // string
+//                 "host_device_info": {
+//                     "os": "", // string
+//                     "browser": "" //string
+//                 } // object
+//             }
+//         } // object
+//     },
+//     "connection": {
+//         // disconnect from server/websocket due to [device sleep, network, deivce shutdown], don't destory [host, remote] persistence data until ttl expires (ttl renews while communicating with every message between deivces to keep devices connected for longer time host <-> remote, dead/zombie/ghost device cleanup schedules from the last message it communicated, since it will not renew so it will get cleaned up after ttl expires)
+//         "disconnect": {
+//             "type": "", // string [host]
+//             // manual disconnnect button clicked from host (cleanup only when ttl expires)
+//             "true": {
+//                 "host_token": "",
+//                 "session": "",
+//                 "device_info": {
+//                     "os": "", // string
+//                     "browser": "" //string
+//                 }
+//             }
+//         },
+//         // reconnnect [host, remote], may have disconnected for various reasons [device sleep, network, deivce shutdown, manual disconnected]
+//         "reconnect": {
+//             "type": "", // string [host, remote]
+//             "token": {
+//                 "token": "",
+//                 "session": "",
+//                 "device_info": {
+//                     "os": "", // string
+//                     "browser": "" //string
+//                 }
+//             }
+//         },
+//         // unpair remote (cleanup / destory the remote data/socket immedieatly) from the host so it will be able to connect with another host
+//         "unpair": {
+//             "type": "", // string [remote]
+//             "token": {
+//                 "token": "",
+//                 "session": "",
+//                 "device_info": {
+//                     "os": "", // string
+//                     "browser": "" //string
+//                 }
+//             }
+//         },
+//         // destory session from host to disconnect all remotes and destory/delete the session
+//         "destroy": {
+//             "host_token": "",
+//             "session": "",
+//             "device_info": {
+//                 "os": "", // string
+//                 "browser": "" //string
+//             },
+//             "confirmed": true // boolean
+//         }
+//     },
+//     "controls":{
+//         "type":"", // string [remote]
+//         "playback": true, // boolean (true = play, false = pause),
+//         "mute": true, // boolean
+//         "seek": 0 // number percentage or host respective number unit
+//     },
+//     "updates":{
+//         "type":"", // string [host]
+//         "medialist":[
+//             {
+//                 "tabid":"", // string or number,
+//                 "tabinfo":{
+//                     "title": "", // string
+//                     "url": "", // string
+//                     "favicon":"" // string
+//                 }, //
+//                 "updateType": ["playback", "mute", "seek"], // optional array of what to update
+//                 "updateValue": [] //  [string, boolean, number] based on update type. (required only when updateType)
+//             }
+//         ], // array of media list and thier updates,
+//     }
+// }
+
+
+{
+  "meta": {
+    "version": 2,
+    "id": "uuid",
+    "timestamp": 1700000000000,
+    "role": "host | remote | server",
+    "action": ""
+  },
+
+  "auth": {
+    "host_token": {
+      "token": "",
+      "ttl": "30d"
+    },
+    "remote_token": {
+      "token": "",
+      "ttl": "30d"
+    },
+    "session": ""
+  },
+
+  "device": {
+    "os": "",
+    "browser": ""
+  },
+
+  "init": {
+    "host_register": {
+      "action": "init.host_register",
+      "payload": {
+        "device": {}
+      }
+    },
+
+    "host_registered": {
+      "action": "init.host_registered",
+      "payload": {
+        "auth": {
+          "host_token": {},
+          "session": ""
+        }
+      }
+    },
+
+    "pairing": {
+      "request_key": {
+        "action": "init.pairing_key_request",
+        "payload": {
+          "auth": {
+            "host_token": "",
+            "session": ""
+          }
+        }
+      },
+
+      "issue_key": {
+        "action": "init.pairing_key",
+        "payload": {
+          "pairing_key": ""
+        }
+      },
+
+      "submit_key": {
+        "action": "init.pairing_key_submit",
+        "payload": {
+          "pairing_key": "",
+          "device": {}
+        }
+      },
+
+      "result": {
+        "action": "init.pairing_result",
+        "payload": {
+          "valid": true,
+          "auth": {
+            "remote_token": {},
+            "session": ""
+          },
+          "host_device": {}
+        }
+      }
+    }
+  },
+
+  "connection": {
+    "heartbeat": {
+      "action": "connection.heartbeat",
+      "payload": {
+        "auth": {
+          "token": "",
+          "session": ""
+        }
+      }
+    },
+
+    "disconnect": {
+      "action": "connection.disconnect",
+      "payload": {
+        "auth": {
+          "token": "",
+          "session": ""
+        },
+        "reason": "manual | network | sleep | shutdown"
+      }
+    },
+
+    "reconnect": {
+      "action": "connection.reconnect",
+      "payload": {
+        "auth": {
+          "token": "",
+          "session": ""
+        },
+        "device": {}
+      }
+    },
+
+    "unpair": {
+      "action": "connection.unpair",
+      "payload": {
+        "auth": {
+          "host_token": "",
+          "session": ""
+        },
+        "remote_token": ""
+      }
+    },
+
+    "destroy": {
+      "action": "connection.destroy",
+      "payload": {
+        "auth": {
+          "host_token": "",
+          "session": ""
+        },
+        "confirmed": true
+      }
+    }
+  },
+
+  "controls": {
+    "action": "controls.media",
+    "payload": {
+      "session": "",
+      "tab_id": "",
+      "events": [
+        { "type": "play" },
+        { "type": "pause" },
+        { "type": "mute", "value": true },
+        { "type": "seek", "value": 120.5 }
+      ]
+    }
+  },
+
+  "updates": {
+    "media_list": {
+      "action": "updates.media_list",
+      "payload": {
+        "session": "",
+        "tabs": [
+          {
+            "tab_id": "",
+            "info": {
+              "title": "",
+              "url": "",
+              "favicon": ""
+            }
+          }
+        ]
+      }
+    },
+
+    "media_state": {
+      "action": "updates.media_state",
+      "payload": {
+        "session": "",
+        "tab_id": "",
+        "changes": {
+          "playback": "playing | paused",
+          "mute": true,
+          "current_time": 123.4
+        }
+      }
+    }
+  },
+
+  "system": {
+    "ack": {
+      "action": "ack",
+      "payload": {
+        "message_id": "",
+        "status": "ok"
+      }
+    },
+
+    "error": {
+      "action": "error",
+      "payload": {
+        "code": "INVALID_TOKEN | EXPIRED_SESSION | UNAUTHORIZED | INVALID_ACTION",
+        "message": ""
+      }
+    }
+  }
+}
