@@ -1,16 +1,20 @@
 import { isMediaUrl } from "@/utils/utils";
-import { Channel, CHANNELS, CONTROL_EVENTS, MESSAGE_TYPES, MessagePayload } from "./constants";
+import { CHANNELS, CONTROL_EVENTS, MESSAGE_TYPES } from "./constants";
 import { warn } from "@/utils/log";
 
+/** * @typedef {import('./constants').Channel} Channel
+ * @typedef {import('./constants').MessagePayload} MessagePayload 
+ */
+
 let connected = false;
-let sessionIdentity: string | null = null;
-let hostToken: string | null = null;
+let sessionIdentity = null;
+let hostToken = null;
 
 const offscreenPath = "content.tsx";
 const remoteContext = new Map();
 
 // State helpers
-export function setConnectionState(state: boolean) {
+export function setConnectionState(state) {
     connected = state;
 }
 
@@ -27,28 +31,28 @@ export function getHostToken() {
 }
 
 // Lifecycle hooks
-export function onStart(fn: () => void) {
+export function onStart(fn) {
     chrome.runtime.onStartup.addListener(fn);
 }
 
-export function onInstall(fn: () => void | Promise<void>) {
+export function onInstall(fn) {
     chrome.runtime.onInstalled.addListener(fn);
 }
 
-export function onTabCreated(fn: () => void | Promise<void>) {
+export function onTabCreated(fn) {
     chrome.tabs.onCreated.addListener(() => void fn());
 }
 
-export function onTabRemoved(fn: (tabId: number) => void | Promise<void>) {
+export function onTabRemoved(fn) {
     chrome.tabs.onRemoved.addListener((tabId) => void fn(tabId));
 }
 
-export function onTabUpdated(fn: (tabId: number) => void | Promise<void>) {
+export function onTabUpdated(fn) {
     chrome.tabs.onUpdated.addListener((tabId) => void fn(tabId));
 }
 
 // Connection management
-export function onConnected(newSessionIdentity: string, newHostToken: string) {
+export function onConnected(newSessionIdentity, newHostToken) {
     sessionIdentity = newSessionIdentity;
     hostToken = newHostToken;
     connected = true;
@@ -74,15 +78,15 @@ export async function getMediaList() {
     return tabs
         .filter(tab => isMediaUrl(tab.url))
         .map(tab => ({
-            tabId: tab.id!,
+            tabId: tab.id,
             title: tab.title ?? "",
-            url: tab.url!,
+            url: tab.url,
             favIconUrl: tab.favIconUrl ?? null,
             muted: tab.mutedInfo?.muted ?? false,
         }));
 }
 
-export async function validateTab(tabId: number) {
+export async function validateTab(tabId) {
     try {
         await chrome.tabs.get(tabId);
         return true;
@@ -91,7 +95,7 @@ export async function validateTab(tabId: number) {
     }
 }
 
-export async function getTab(ctx: { tabId: number | null }) {
+export async function getTab(ctx) {
     if (!ctx.tabId) throw new Error("No tab");
 
     try {
@@ -103,7 +107,7 @@ export async function getTab(ctx: { tabId: number | null }) {
 }
 
 // Script injection
-export async function executeScript(tabId: number) {
+export async function executeScript(tabId) {
     await chrome.scripting.executeScript({
         target: { tabId },
         files: ["content.js"],
@@ -133,7 +137,11 @@ export async function injectContentScript() {
 }
 
 // Messaging
-export async function sendMessage(channel: Channel, payload: MessagePayload) {
+/**
+ * @param {Channel} channel
+ * @param {MessagePayload} payload
+ */
+export async function sendMessage(channel, payload) {
     try {
         await chrome.runtime.sendMessage({ type: channel, payload });
     } catch {
@@ -141,10 +149,7 @@ export async function sendMessage(channel: Channel, payload: MessagePayload) {
     }
 }
 
-export function receiveMessage(
-    channel: Channel,
-    handler: (payload: MessagePayload, sendResponse?: (response?: any) => void) => void | true
-) {
+export function receiveMessage(channel, handler) {
     chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
         if (!msg || msg.type !== channel) return;
         return handler(msg.payload, sendResponse);
@@ -162,13 +167,13 @@ async function ensureOffscreen() {
     });
 }
 
-export async function sendToServer(payload: MessagePayload) {
+export async function sendToServer(payload) {
     await ensureOffscreen();
     await sendMessage(CHANNELS.TO_OFFSCREEN, payload);
 }
 
 // Context cleanup
-export function clearTabContext(tabId: number) {
+export function clearTabContext(tabId) {
     for (const ctx of remoteContext.values()) {
         if (ctx.tabId === tabId) {
             ctx.tabId = null;
@@ -178,18 +183,18 @@ export function clearTabContext(tabId: number) {
 
 // Control handlers
 export const CONTROL_HANDLERS = {
-    [CONTROL_EVENTS.TOGGLE_MUTE]: async (ctx: { tabId: number | null }) => {
+    [CONTROL_EVENTS.TOGGLE_MUTE]: async (ctx) => {
         const tab = await getTab(ctx);
         const muted = !tab.mutedInfo?.muted;
-        await chrome.tabs.update(ctx.tabId!, { muted });
-        sendToServer({ type: CONTROL_EVENTS.STATE_UPDATE, muted, });
+        await chrome.tabs.update(ctx.tabId, { muted });
+        sendToServer({ type: CONTROL_EVENTS.STATE_UPDATE, muted });
     },
 };
 
-export async function handleControlEvent(ctx: { tabId: number | null }, payload: MessagePayload) {
+export async function handleControlEvent(ctx, payload) {
     if (!ctx.tabId) return;
 
-    const handler = CONTROL_HANDLERS[payload.type as keyof typeof CONTROL_HANDLERS];
+    const handler = CONTROL_HANDLERS[payload.type];
     try {
         if (handler) {
             await handler(ctx);

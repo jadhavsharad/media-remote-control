@@ -1,14 +1,12 @@
-import { BASE_DOMAINS } from "@/utils/constants";
-import { MessageType, MESSAGE_TYPES } from "@/utils/constants";
-
+import { BASE_DOMAINS, MESSAGE_TYPES } from "@/utils/constants";
 
 // Type guards / validators
-export function isValidMessageType(action: unknown): action is MessageType {
-    return Object.values(MESSAGE_TYPES).includes(action as MessageType);
+export function isValidMessageType(action) {
+    return Object.values(MESSAGE_TYPES).includes(action);
 }
 
 // Media Helpers
-export function isMediaUrl(url?: string): boolean {
+export function isMediaUrl(url) {
     if (!url) return false;
 
     try {
@@ -18,9 +16,10 @@ export function isMediaUrl(url?: string): boolean {
         return false;
     }
 }
+
 // Browser Detection
-export function getBrowser(): string {
-    const brands = (navigator as any).userAgentData?.brands?.map((b: any) => b.brand) ?? [];
+export function getBrowser() {
+    const brands = navigator.userAgentData?.brands?.map(b => b.brand) ?? [];
     if (brands.includes("Microsoft Edge")) return "Edge";
     if (brands.includes("Brave")) return "Brave";
     if (brands.includes("Google Chrome")) return "Chrome";
@@ -29,11 +28,10 @@ export function getBrowser(): string {
 }
 
 // Debounce
-export function debouncedScheduler(fn: () => void, delay = 300) {
-    let timer: number | null = null;
+export function debouncedScheduler(fn, delay = 300) {
+    let timer = null;
     return () => {
         if (timer !== null) return;
-
         timer = window.setTimeout(() => { timer = null; fn(); }, delay);
     };
 }

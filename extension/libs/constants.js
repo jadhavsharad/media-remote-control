@@ -1,11 +1,11 @@
+/* -------------------- DOMAINS -------------------- */
 export const BASE_DOMAINS = [
   "youtube.com",
   "netflix.com",
   "primevideo.com",
   "hotstar.com",
   "vimeo.com",
-] as const;
-
+];
 
 /* -------------------- MESSAGE TYPES -------------------- */
 
@@ -27,9 +27,7 @@ export const MESSAGE_TYPES = {
 
   // script
   SCRIPT_INJECTION_FAIL: "script.injection.failed"
-} as const;
-
-export type MessageType = typeof MESSAGE_TYPES[keyof typeof MESSAGE_TYPES];
+};
 
 /* -------------------- CHANNELS -------------------- */
 
@@ -45,12 +43,9 @@ export const CHANNELS = {
   FROM_CONTENT_SCRIPT: "receive.from.content_script",
   FROM_POPUP: "receive.from.popup",
   FROM_OFFSCREEN: "receive.from.offscreen",
-} as const;
+};
 
-export type Channel = typeof CHANNELS[keyof typeof CHANNELS];
-
-export type MessagePayload = { type: MessageType | ControlEvent; } & Record<string, unknown>;
-
+/* -------------------- CONTROL EVENTS -------------------- */
 
 export const CONTROL_EVENTS = {
   // playback
@@ -71,6 +66,4 @@ export const CONTROL_EVENTS = {
 
   // state sync
   STATE_UPDATE: "control.state_update",
-} as const;
-
-export type ControlEvent =  typeof CONTROL_EVENTS[keyof typeof CONTROL_EVENTS];
+};
