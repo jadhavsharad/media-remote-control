@@ -2,10 +2,23 @@ let currentVideo = null;
 let lastReportedState = null;
 let observer = null;
 
-const CONTROL_ACTIONS = new Set([
-  "TOGGLE_PLAYBACK"
-]);
 
+const MESSAGE_TYPES = {
+  STATE_UPDATE: "control.state_update",
+  HOST_RECONNECTED: "session.host_reconnected",
+  INTENT: {
+    SET: "control.set",
+    REPORT: "control.report"
+  }
+};
+
+const MEDIA_STATE = {
+  PLAYBACK: "playback",       // values: "PLAYING", "PAUSED"
+  MUTE: "muted",              // values: true, false
+  TIME: "currentTime",        // values: number (seconds)
+  DURATION: "duration",       // values: number (seconds)
+  TITLE: "title",             // values: string
+};
 
 function isValidVideo(video) {
   return (
@@ -27,7 +40,7 @@ function reportState(video) {
   lastReportedState = state;
 
   try {
-    chrome.runtime.sendMessage({ type: "FROM_CONTENT_SCRIPT", update: { type: "STATE_UPDATE", state }, });
+    chrome.runtime.sendMessage({ type: "receive.from.content_script", payload: { type: MESSAGE_TYPES.STATE_UPDATE, state, intent: MESSAGE_TYPES.INTENT.REPORT, }, });
   } catch {
   }
 }
@@ -89,7 +102,7 @@ function startPolling() {
 
 chrome.runtime.onMessage.addListener((msg) => {
   // WebSocket Reconnect Rebind - handle reconnection
-  if (msg.type === "HOST_RECONNECTED") {
+  if (msg.type === MESSAGE_TYPES.HOST_RECONNECTED) {
     discoverVideo();
     if (currentVideo) {
       reportState(currentVideo);
@@ -100,9 +113,9 @@ chrome.runtime.onMessage.addListener((msg) => {
   // Handle control events
   if (
     !msg ||
-    msg.type !== "CONTROL_EVENT" ||
-    typeof msg.action !== "string" ||
-    !CONTROL_ACTIONS.has(msg.action)
+    msg.type !== MESSAGE_TYPES.STATE_UPDATE ||
+    typeof msg.type !== "string" ||
+    !MEDIA_STATE.has(msg.type)
   ) {
     return;
   }
@@ -111,7 +124,7 @@ chrome.runtime.onMessage.addListener((msg) => {
 
   try {
     switch (msg.action) {
-      case "TOGGLE_PLAYBACK":
+      case MESSAGE_TYPES.STATE_UPDATE:
         currentVideo.paused
           ? currentVideo.play()
           : currentVideo.pause();
