@@ -156,6 +156,11 @@ async function handleServerMessage(msg) {
       const ctx = remoteContext.get(msg.remoteId);
       if (!ctx?.tabId) return;
 
+      if (ctx.tabId !== msg.tabId) {
+        console.warn("Remote attempted cross-tab control");
+        return;
+      }
+
       // validate before sending
       const isValid = await validateTab(ctx.tabId);
 
@@ -230,7 +235,7 @@ async function startOffscreen() {
 }
 
 // Browser Detection
-export function getBrowser() {
+function getBrowser() {
   const brands = navigator.userAgentData?.brands?.map(b => b.brand) ?? [];
   if (brands.includes("Microsoft Edge")) return "Edge";
   if (brands.includes("Brave")) return "Brave";
@@ -240,7 +245,7 @@ export function getBrowser() {
 }
 
 // OS Detection
-export function getOS() {
+function getOS() {
   return new Promise((resolve) => {
     chrome.runtime.getPlatformInfo((info) => {
       const osMap = {
@@ -313,7 +318,7 @@ async function sendMessage(channel, payload) {
 
 function receiveMessage(channel, handler) {
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    
+
     // 1. Must be a message for this channel
     if (!msg || msg.type !== channel) return false;
 
@@ -337,9 +342,15 @@ function receiveMessage(channel, handler) {
       return false;
     }
 
-    // 5️⃣ Dispatch
+    // 5. Remote must exist
+    if (!remoteContext.has(msg.remoteId)) {
+      console.warn("Unknown remote blocked");
+      return;
+    }
+
+    // 6. Dispatch
     const result = handler(msg.payload, sendResponse); // Return true to keep channel open if async
-    
+
     if (result === true) return true;
 
     return false;
