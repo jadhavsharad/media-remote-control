@@ -15,27 +15,35 @@ function handleAuth(ws, msg, store) {
     }
 
     const { hostToken: existingHostToken, info } = msg;
-    let session = existingHostToken ? store.getSessionByHostToken(existingHostToken) : null;
-    let sessionId, hostToken;
+    let sessionId, session, hostToken;
 
-    if (session) {
-      // Recover existing
-      sessionId = store.hostTokenMap.get(existingHostToken);
-      console.log(`[RECOVERY] Host re-connected to session ${sessionId}`);
-      
-      if (session.socket && isOpen(session.socket) && session.socket !== ws) {
-        session.socket.close();
+    if (existingHostToken) {
+      session = store.getSessionByHostToken(existingHostToken);
+      if (session) {
+        sessionId = store.hostTokenMap.get(existingHostToken);
+        console.log(`[RECOVERY] Host re-connected to session ${sessionId}`);
+
+        if (session.socket && isOpen(session.socket)) {
+          if (session.socket !== ws) {
+            console.warn(`[STRICT] Closing ghost host for ${sessionId}`);
+            session.socket.close();
+          }
+        }
+
+        session.socket = ws;
+        session.hostDisconnectedAt = null;
+        hostToken = existingHostToken;
       }
-      session.socket = ws;
-      session.hostDisconnectedAt = null;
-      hostToken = existingHostToken;
-    } else {
-      // Create new
+    }
+
+    if (!session) {
       sessionId = generateUUID();
       hostToken = generateUUID();
       console.log(`[NEW] Created new host session ${sessionId}`);
+
       session = store.createSession(sessionId, hostToken, ws, info);
     }
+
 
     ws.role = MESSAGE_TYPES.ROLE.HOST;
     ws.sessionId = sessionId;
@@ -51,7 +59,7 @@ function handleAuth(ws, msg, store) {
   // --- PAIRING CODE REQUEST ---
   if (msg.type === MESSAGE_TYPES.PAIRING_KEY_REQUEST) {
     if (ws.role !== MESSAGE_TYPES.ROLE.HOST) return true;
-    
+
     const session = store.getSession(ws.sessionId);
     if (!session) return true;
 
@@ -144,6 +152,7 @@ function attachRemoteSocket(ws, identity, trustToken, store) {
   ws.trustToken = trustToken;
 
   const session = store.getSession(identity.sessionId);
+
   if (session) {
     session.remotes.set(identity.id, identity);
     if (session.socket) {

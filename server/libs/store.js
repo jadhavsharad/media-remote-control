@@ -13,7 +13,7 @@ class SessionStore {
     this.pairCodes = new Map();        // code -> sessionId
     this.remoteIdentities = new Map(); // trustToken -> Identity
     this.hostTokenMap = new Map();     // hostToken -> sessionId
-    
+
     this.startCleanup();
   }
 
@@ -55,7 +55,7 @@ class SessionStore {
   resolvePairCode(code) {
     const sessionId = this.pairCodes.get(code);
     if (!sessionId) return null;
-    
+
     // Invalidate code after use
     this.pairCodes.delete(code);
     const session = this.hostSessions.get(sessionId);
@@ -99,7 +99,7 @@ class SessionStore {
   startCleanup() {
     setInterval(() => {
       const t = now();
-      
+
       // 1. Expire Pair Codes
       for (const [code, sessionId] of this.pairCodes.entries()) {
         const session = this.hostSessions.get(sessionId);
@@ -113,14 +113,16 @@ class SessionStore {
 
       // 2. Remove abandoned sessions
       for (const [sessionId, session] of this.hostSessions.entries()) {
-        if (!session.socket && session.hostDisconnectedAt && (t - session.hostDisconnectedAt > SESSION_TTL_MS)) {
-          console.log(`[CLEANUP] Removing abandoned session ${sessionId}`);
-          for (const identity of session.remotes.values()) {
-            if (identity.socket && isOpen(identity.socket)) identity.socket.close();
-            this.remoteIdentities.delete(identity.trustToken);
+        if (!session.socket && session.hostDisconnectedAt) {
+          if (t - session.hostDisconnectedAt > SESSION_TTL_MS) {
+            console.log(`[CLEANUP] Removing abandoned session ${sessionId}`);
+            for (const identity of session.remotes.values()) {
+              if (identity.socket && isOpen(identity.socket)) identity.socket.close();
+              this.remoteIdentities.delete(identity.trustToken);
+            }
+            this.hostSessions.delete(sessionId);
+            if (session.hostToken) this.hostTokenMap.delete(session.hostToken);
           }
-          this.hostSessions.delete(sessionId);
-          if (session.hostToken) this.hostTokenMap.delete(session.hostToken);
         }
       }
 
@@ -137,8 +139,6 @@ class SessionStore {
         if (!ws.isAlive) {
           return ws.terminate();
         }
-        ws.isAlive = false;
-        ws.ping();
       });
     }, CLEANUP_INTERVAL_MS);
   }

@@ -22,19 +22,38 @@ wss.on("connection", (ws) => {
   ws.lastSeenAt = Date.now();
   ws.trustToken = null;
 
-  ws.on("pong", () => ws.isAlive = true);
-
   ws.on("message", (raw) => {
+
     let msg;
     try {
       msg = JSON.parse(raw.toString());
     } catch {
       return;
     }
-    
+    console.log(msg)
+
     if (!isValidMessage(msg)) return;
+
     // Auth Handlers (Register, Pair, Validate)
     if (handleAuth(ws, msg, store)) return;
+
+    const session = store.getSession(ws.sessionId);
+    if (!session || session.socket !== ws && ws.role === MESSAGE_TYPES.ROLE.HOST) {
+      console.warn("[Host Desync] Killing Socket");
+      ws.close();
+      return;
+    }
+
+    if (ws.role === MESSAGE_TYPES.ROLE.REMOTE) {
+      const identity = store.getRemote(ws.trustToken);
+      if (!identity || identity.socket !== ws) {
+        console.warn("[Remote Desync] Killing Socket");
+        ws.close();
+        return;
+      }
+    }
+
+
     // Rate Limiting
     if (ws.sessionId && isRateLimited(ws)) return;
     // Message Routing
