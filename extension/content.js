@@ -29,6 +29,10 @@ function isValidVideo(video) {
   );
 }
 
+function isMediaState(key) {
+  return Object.values(MEDIA_STATE).includes(key);
+}
+
 function getPlaybackState(video) {
   return video.paused ? "PAUSED" : "PLAYING";
 }
@@ -40,7 +44,7 @@ function reportState(video) {
   lastReportedState = state;
 
   try {
-    chrome.runtime.sendMessage({ type: "receive.from.content_script", payload: { type: MESSAGE_TYPES.STATE_UPDATE, state, intent: MESSAGE_TYPES.INTENT.REPORT, }, });
+    chrome.runtime.sendMessage({ type: "receive.from.content_script", payload: { type: MESSAGE_TYPES.STATE_UPDATE, state, intent: MESSAGE_TYPES.INTENT.REPORT, }, }).catch(() => { });
   } catch {
   }
 }
@@ -100,38 +104,42 @@ function startPolling() {
   }, 2000);
 }
 
-chrome.runtime.onMessage.addListener((msg) => {
-  // WebSocket Reconnect Rebind - handle reconnection
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === MESSAGE_TYPES.HOST_RECONNECTED) {
     discoverVideo();
     if (currentVideo) {
       reportState(currentVideo);
     }
+    sendResponse({ ok: true });
     return;
   }
 
-  // Handle control events
   if (
     !msg ||
     msg.type !== MESSAGE_TYPES.STATE_UPDATE ||
     typeof msg.type !== "string" ||
-    !MEDIA_STATE.has(msg.type)
+    !isMediaState(msg.key)
   ) {
+    sendResponse({ ok: false });
     return;
   }
 
-  if (!currentVideo || !currentVideo.isConnected) return;
+  if (!currentVideo || !currentVideo.isConnected) {
+    sendResponse({ ok: false, reason: "No video" });
+    return;
+  }
 
   try {
-    switch (msg.action) {
-      case MESSAGE_TYPES.STATE_UPDATE:
-        currentVideo.paused
-          ? currentVideo.play()
-          : currentVideo.pause();
+    switch (msg.key) {
+      case MEDIA_STATE.PLAYBACK:
+        if (msg.value === "PLAYING") currentVideo.play();
+        else currentVideo.pause();
         break;
     }
+    sendResponse({ ok: true });
   } catch (err) {
     console.error("Control Event Error:", err);
+    sendResponse({ error: err.message });
   }
 });
 

@@ -1,32 +1,33 @@
-import { TRIGGERS, CHANNELS } from "./constants.js";
+import { CHANNELS, MESSAGE_TYPES } from "./libs/constants.js";
+
 
 
 let socket = null;
 let reconnect = null;
 let userDisconnected = false; // Prevents auto-reconnect after user disconnect
-const WS_URL = "wss://media-remote-control-service.onrender.com";
+const WS_URL = "ws://localhost:3000";
 
 function connect() {
     socket = new WebSocket(WS_URL);
 
     socket.onopen = () => {
-        userDisconnected = false; // Clear flag on successful connection
+        userDisconnected = false;
         chrome.runtime.sendMessage({
-            type: TRIGGERS.FROM_SERVER,
+            type: CHANNELS.FROM_SERVER,
             payload: { type: "WS_OPEN" }
         });
     };
 
     socket.onmessage = (event) => {
         try {
-            chrome.runtime.sendMessage({ type: TRIGGERS.FROM_SERVER, payload: JSON.parse(event.data) });
+            chrome.runtime.sendMessage({ type: CHANNELS.FROM_SERVER, payload: JSON.parse(event.data) });
         } catch (e) {
             console.error("Parse error", e);
         }
     };
 
     socket.onclose = () => {
-        chrome.runtime.sendMessage({ type: TRIGGERS.FROM_SERVER, payload: { type: "WS_CLOSED" } });
+        chrome.runtime.sendMessage({ type: CHANNELS.FROM_SERVER, payload: { type: "WS_CLOSED" } });
         socket = null;
         clearTimeout(reconnect);
 
@@ -41,32 +42,22 @@ function connect() {
         socket.close();
     };
 }
-
-
 connect();
-
 chrome.runtime.onMessage.addListener((msg) => {
-    // Handle forced disconnect command
-    if (msg.type === CHANNELS.DISCONNECT_WS) {
+    console.log("[OFFSCREEN]: ", msg)
+
+    
+    if (msg.payload.type === MESSAGE_TYPES.HOST_DISCONNECT) {
         userDisconnected = true;
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.close();
-        }
-        return;
+        if (isOpen()) socket.close();
     }
-
-    // Handle forced connect command
-    if (msg.type === CHANNELS.CONNECT_WS) {
+    
+    if (msg.payload.type === MESSAGE_TYPES.HOST_RECONNECT) {
         userDisconnected = false;
-        if (!isOpen()) {
-            connect();
-        }
-        return;
+        if (!isOpen()) connect();
     }
-
-    // Handle normal server messages
-    if (msg.type !== TRIGGERS.FROM_BACKGROUND) return;
-    if (!isOpen()) return;
+        if (msg.type !== CHANNELS.FROM_BACKGROUND)  return;
+        if (!isOpen()) return;
 
 
     socket.send(JSON.stringify(msg.payload));
@@ -76,3 +67,4 @@ chrome.runtime.onMessage.addListener((msg) => {
 function isOpen() {
     return socket && socket.readyState === WebSocket.OPEN;
 }
+

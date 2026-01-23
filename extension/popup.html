@@ -1,74 +1,229 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-  <meta charset="UTF-8" />
-  <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont;
-      background: #0f172a;
-      color: white;
-      margin: 0;
-      padding: 12px;
-      width: 240px;
-    }
-
-    .status {
-      font-size: 12px;
-      color: #94a3b8;
-      margin-bottom: 8px;
-    }
-
-    .session {
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 12px;
-      word-break: break-all;
-    }
-
-    button {
-      width: 100%;
-      padding: 8px;
-      border-radius: 6px;
-      border: none;
-      cursor: pointer;
-      font-size: 14px;
-    }
-
-    .disconnect {
-      background: #dc2626;
-      color: white;
-    }
-
-    .inactive {
-      background: #334155;
-      cursor: not-allowed;
-    }
-  </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Extension Controller</title>
+  <link rel="stylesheet" href="popup.css">
 </head>
+<style>
+  /* Base Reset & Typography */
+  :root {
+    --bg-color: #ffffff;
+    --text-primary: #0f172a;
+    --text-secondary: #64748b;
+    --primary-color: #2563eb;
+    --danger-color: #ef4444;
+    --warning-bg: #fef3c7;
+    --warning-text: #92400e;
+    --border-radius: 6px;
+  }
+
+  body {
+    width: 320px;
+    /* Standard extension popup width */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 16px;
+    color: var(--text-primary);
+    background-color: var(--bg-color);
+  }
+
+  /* Screen Reader Only Class (Standard A11y Pattern) */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+  }
+
+  /* Header */
+  .app-header h1 {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 16px 0;
+  }
+
+  /* Status Panel */
+  .status-panel {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: var(--border-radius);
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+
+  .status-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    margin-bottom: 4px;
+  }
+
+  .status-row:last-child {
+    margin-bottom: 0;
+  }
+
+  .status-label {
+    color: var(--text-secondary);
+  }
+
+  .status-value {
+    font-weight: 600;
+  }
+
+  /* Buttons */
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .btn {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: var(--border-radius);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s, opacity 0.2s;
+  }
+
+  /* Focus States for A11y */
+  .btn:focus {
+    outline: 2px solid var(--text-primary);
+    outline-offset: 2px;
+  }
+
+  .btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background-color: #1d4ed8;
+  }
+
+  .btn-danger {
+    background-color: #fee2e2;
+    color: var(--danger-color);
+  }
+
+  .btn-danger:hover {
+    background-color: #fecaca;
+  }
+
+  .btn.inactive {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: #e2e8f0;
+    /* Neutral gray for disabled state */
+    color: #94a3b8;
+  }
+
+  /* QR Section */
+  .qr-container {
+    text-align: center;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 16px;
+  }
+
+  .qr-container h3 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  .qr-code-wrapper {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 12px;
+  }
+
+  .code-display {
+    font-size: 12px;
+    background: #f1f5f9;
+    padding: 8px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+
+  .code-display code {
+    font-family: "Courier New", monospace;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 1px;
+    margin-left: 8px;
+  }
+
+  /* Warning Banner (JS Injected) */
+  .warning-banner {
+    background-color: var(--warning-bg);
+    color: var(--warning-text);
+    padding: 10px;
+    margin-bottom: 12px;
+    border-radius: var(--border-radius);
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+</style>
 
 <body>
-  <div class="status" id="status">Status: Disconnected</div>
-  <div class="session" id="session">Session: —</div>
 
-  <div id="pair-container" style="display: none; margin-bottom: 12px; text-align: center;">
-    <div id="qrcode" style="margin: 0 auto 8px auto;"></div>
-    <div id="code-text"
-      style="font-family: monospace; font-size: 18px; letter-spacing: 2px; font-weight: bold; color: #fbbf24;"></div>
-    <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">Tap to Scan on Phone</div>
-  </div>
+  <header class="app-header">
+    <h1>Device Pairing</h1>
+  </header>
 
-  <button id="pair-btn" style="background: #2563eb; margin-bottom: 8px;">
-    Pair New Device
-  </button>
+  <main>
+    <section class="status-panel" aria-labelledby="status-heading">
+      <h2 id="status-heading" class="sr-only">Connection Status</h2>
 
-  <button id="reconnect" style="background: #16a34a; margin-bottom: 8px; display: none;">
-    Reconnect
-  </button>
+      <div class="status-row">
+        <span class="status-label">Status:</span>
+        <span id="status" role="status" class="status-value">Checking...</span>
+      </div>
 
-  <button id="disconnect" class="inactive" disabled>
-    Disconnect
-  </button>
+      <div class="status-row">
+        <span class="status-label">Session:</span>
+        <span id="session" class="status-value">—</span>
+      </div>
+    </section>
+
+    <section class="controls" aria-label="Connection Controls">
+      <button id="pair-btn" class="btn btn-primary" type="button">
+        Pair Device
+      </button>
+
+      <button id="reconnect" class="btn btn-warning" type="button" style="display: none;">
+        Reconnect Host
+      </button>
+
+      <button id="disconnect" class="btn btn-danger inactive" type="button" disabled aria-disabled="true">
+        Disconnect
+      </button>
+    </section>
+
+    <section id="pair-container" class="qr-container" style="display: none;" aria-live="polite">
+      <h3>Scan to Pair</h3>
+
+      <div id="qrcode" class="qr-code-wrapper"></div>
+
+      <div class="code-display">
+        <span>Pairing Code:</span>
+        <code id="code-text"></code>
+      </div>
+    </section>
+  </main>
 
   <script src="libs/qrcode.min.js"></script>
   <script src="popup.js"></script>
