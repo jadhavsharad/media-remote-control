@@ -169,7 +169,7 @@ const refreshMediaList = debouncedScheduler(async () => {
 
 chrome.tabs.onRemoved.addListener(() => refreshMediaList());
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.url || changeInfo.status === 'complete') refreshMediaList();
+  refreshMediaList();
 });
 chrome.tabs.onCreated.addListener(() => refreshMediaList());
 
