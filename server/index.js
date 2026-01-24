@@ -31,6 +31,8 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    console.log("[Message]", msg);
+
     if (!isValidMessage(msg)) return;
 
     // Auth Handlers (Register, Pair, Validate)
