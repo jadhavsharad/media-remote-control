@@ -1,11 +1,25 @@
+// content.js
 let currentVideo = null;
 let lastReportedState = null;
 let observer = null;
 
-const CONTROL_ACTIONS = new Set([
-  "TOGGLE_PLAYBACK"
-]);
 
+const MESSAGE_TYPES = {
+  STATE_UPDATE: "control.state_update",
+  HOST_RECONNECTED: "session.host_reconnected",
+  INTENT: {
+    SET: "control.set",
+    REPORT: "control.report"
+  }
+};
+
+const MEDIA_STATE = {
+  PLAYBACK: "playback",       // values: "PLAYING", "PAUSED"
+  MUTE: "muted",              // values: true, false
+  TIME: "currentTime",        // values: number (seconds)
+  DURATION: "duration",       // values: number (seconds)
+  TITLE: "title",             // values: string
+};
 
 function isValidVideo(video) {
   return (
@@ -14,6 +28,10 @@ function isValidVideo(video) {
     !video.disablePictureInPicture &&
     video.readyState >= 2
   );
+}
+
+function isMediaState(key) {
+  return Object.values(MEDIA_STATE).includes(key);
 }
 
 function getPlaybackState(video) {
@@ -27,7 +45,7 @@ function reportState(video) {
   lastReportedState = state;
 
   try {
-    chrome.runtime.sendMessage({ type: "FROM_CONTENT_SCRIPT", update: { type: "STATE_UPDATE", state }, });
+    chrome.runtime.sendMessage({ type: "receive.from.content_script", payload: { type: MESSAGE_TYPES.STATE_UPDATE, state, intent: MESSAGE_TYPES.INTENT.REPORT, }, }).catch(() => { });
   } catch {
   }
 }
@@ -87,38 +105,42 @@ function startPolling() {
   }, 2000);
 }
 
-chrome.runtime.onMessage.addListener((msg) => {
-  // WebSocket Reconnect Rebind - handle reconnection
-  if (msg.type === "HOST_RECONNECTED") {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === MESSAGE_TYPES.HOST_RECONNECTED) {
     discoverVideo();
     if (currentVideo) {
       reportState(currentVideo);
     }
+    sendResponse({ ok: true });
     return;
   }
 
-  // Handle control events
   if (
     !msg ||
-    msg.type !== "CONTROL_EVENT" ||
-    typeof msg.action !== "string" ||
-    !CONTROL_ACTIONS.has(msg.action)
+    msg.type !== MESSAGE_TYPES.STATE_UPDATE ||
+    typeof msg.type !== "string" ||
+    !isMediaState(msg.key)
   ) {
+    sendResponse({ ok: false });
     return;
   }
 
-  if (!currentVideo || !currentVideo.isConnected) return;
+  if (!currentVideo || !currentVideo.isConnected) {
+    sendResponse({ ok: false, reason: "No video" });
+    return;
+  }
 
   try {
-    switch (msg.action) {
-      case "TOGGLE_PLAYBACK":
-        currentVideo.paused
-          ? currentVideo.play()
-          : currentVideo.pause();
+    switch (msg.key) {
+      case MEDIA_STATE.PLAYBACK:
+        if (msg.value === "PLAYING") currentVideo.play();
+        else currentVideo.pause();
         break;
     }
+    sendResponse({ ok: true });
   } catch (err) {
     console.error("Control Event Error:", err);
+    sendResponse({ error: err.message });
   }
 });
 

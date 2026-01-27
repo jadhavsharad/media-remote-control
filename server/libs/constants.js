@@ -1,7 +1,11 @@
 /* -------------------- MESSAGE TYPES -------------------- */
-export const MESSAGE_TYPES = {
+const MESSAGE_TYPES = {
   // init / pairing
+  HOST_REGISTER: "init.host_register",
+  HOST_REGISTERED: "init.host_registered",
+  PAIRING_KEY_REQUEST: "init.pairing_key_request",
   PAIRING_KEY: "init.pairing_key",
+  PAIRING_KEY_VALID: "init.pairing_key_valid",
   EXCHANGE_PAIR_KEY: "init.exchange_pair_key",
   PAIR_SUCCESS: "init.pair_success",
   PAIR_FAILED: "init.pair_failed",
@@ -12,15 +16,15 @@ export const MESSAGE_TYPES = {
   SESSION_INVALID: "session.invalid",
   REMOTE_JOINED: "session.remote_joined",
   HOST_DISCONNECTED: "session.host_disconnected",
+  HOST_DISCONNECT: "session.host_disconnect",
   HOST_RECONNECTED: "session.host_reconnected",
+  HOST_RECONNECT: "session.host_reconnect",
 
   // connection
-  BLOCKED: "Blocked",
-  CONNECTING: "Connecting",
-  DISCONNECTED: "Disconnected",
-  CONNECTED: "Connected",
-  VERIFYING: "Verifying",
-  WAITING: "Waiting",
+  WS_OPEN: "connection.ws_open",
+  WS_CLOSED: "connection.ws_closed",
+  CONNECT_WS: "connection.connect_ws",
+  DISCONNECT_WS: "connection.disconnect_ws",
 
   // media
   MEDIA_LIST: "media.list",
@@ -33,16 +37,21 @@ export const MESSAGE_TYPES = {
     REPORT: "control.report"
   },
 
-  // script
-  SCRIPT_INJECTION_FAIL: "script.injection.failed",
-  REINJECTION_FAILED: "script.reinjection.failed" // For popup
+  ROLE: {
+    HOST: "HOST",
+    REMOTE: "REMOTE",
+  }
 };
 
+const MEDIA_STATE = {
+  PLAYBACK: "playback",
+  MUTE: "muted",
+  TIME: "currentTime",
+  DURATION: "duration",
+  TITLE: "title",
+};
 
-export const MEDIA_STATE = {
-  PLAYBACK: "playback",       // values: "PLAYING", "PAUSED"
-  MUTE: "muted",              // values: true, false
-  TIME: "currentTime",        // values: number (seconds)
-  DURATION: "duration",       // values: number (seconds)
-  TITLE: "title",             // values: string
+module.exports = {
+  MESSAGE_TYPES,
+  MEDIA_STATE
 };
