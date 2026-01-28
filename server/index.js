@@ -74,6 +74,10 @@ wss.on("connection", (ws) => {
   });
 });
 
+app.get("/ping", (req, res) => {
+  res.status(200).send("pong");
+});
+
 app.get("/", (_, res) => res.send("Secure Server Running"));
 
 if (require.main === module) {
