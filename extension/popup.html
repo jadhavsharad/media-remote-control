@@ -176,6 +176,35 @@
     align-items: center;
     gap: 8px;
   }
+
+  .remote-link {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px dashed #e2e8f0;
+    text-align: center;
+  }
+
+  .remote-link p {
+    margin: 0 0 6px 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .remote-url {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--primary-color);
+    text-decoration: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: #eff6ff;
+  }
+
+  .remote-url:hover {
+    background: #dbeafe;
+    text-decoration: underline;
+  }
 </style>
 
 <body>
@@ -224,6 +253,13 @@
       </div>
     </section>
   </main>
+  <section class="remote-link" aria-label="Remote App Link">
+    <p>Open on your phone or another device:</p>
+
+    <a href="https://media-remote-control.vercel.app/" target="_blank" rel="noopener noreferrer" class="remote-url">
+      media-remote-control.vercel.app
+    </a>
+  </section>
 
   <script src="libs/qrcode.min.js"></script>
   <script src="popup.js"></script>

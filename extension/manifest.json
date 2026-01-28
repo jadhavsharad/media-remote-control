@@ -9,9 +9,6 @@
     "offscreen",
     "scripting"
   ],
-  "host_permissions": [
-    "*://*.youtube.com/*"
-  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -19,7 +16,12 @@
   "content_scripts": [
     {
       "matches": [
-        "*://*.youtube.com/*"
+        "*://*.youtube.com/*",
+        "*://*.netflix.com/*",
+        "*://*.primevideo.com/*",
+        "*://*.hotstar.com/*",
+        "*://*.vimeo.com/*",
+        "*://*.sonyliv.com/*"
       ],
       "js": [
         "content.js"

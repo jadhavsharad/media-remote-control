@@ -5,6 +5,7 @@ export const BASE_DOMAINS = [
   "primevideo.com",
   "hotstar.com",
   "vimeo.com",
+  "sonyliv.com"
 ];
 
 /* -------------------- MESSAGE TYPES -------------------- */
