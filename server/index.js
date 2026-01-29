@@ -31,8 +31,6 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    console.log("[Message]", msg);
-
     if (!isValidMessage(msg)) return;
 
     // Auth Handlers (Register, Pair, Validate)
@@ -72,6 +70,10 @@ wss.on("connection", (ws) => {
       store.handleHostDisconnect(ws);
     }
   });
+});
+
+app.get("/ping", (req, res) => {
+  res.status(200).send("pong");
 });
 
 app.get("/", (_, res) => res.send("Secure Server Running"));
