@@ -259,9 +259,9 @@ const App = () => {
                                     <p>
                                         <small className="text-zinc-400">Connection information</small>{" "}
                                         <br />
-                                        OS: {<span className="capitalize">{hostInfo?.os}</span> || "Unknown"} <br />
-                                        Browser: {hostInfo?.browser || "Unknown"} <br />
-                                        Extension: {("v" + hostInfo?.extensionVersion) || "Unknown"} <br />
+                                        OS: {hostInfo?.os ? <span className="capitalize">{hostInfo?.os}</span> : "Unknown"} <br />
+                                        Browser: {hostInfo?.browser ? hostInfo?.browser : "Unknown"} <br />
+                                        Extension: {hostInfo?.extensionVersion ? "v" + hostInfo?.extensionVersion : <small className="text-red-400">Unknown (Please Try To Update Your Extension)</small>} <br />
                                         Media Tabs open: {(Object.keys(tabsById).length < 10) ? `0${Object.keys(tabsById).length}` : Object.keys(tabsById).length}
                                     </p>
                                     <button onClick={handleDisconnect} className="text-xs text-red-400 bg-red-500/10 px-4 py-2  cursor-pointer h-fit" data-testid="unpair-btn">{" "} Unpair</button>
@@ -283,6 +283,8 @@ const App = () => {
                                         {activeTab?.muted ? <><IoMdVolumeOff /> Unmute</> : <><IoMdVolumeHigh /> Mute</>}
                                     </button>
                                 </div>
+                                {hostInfo?.extensionVersion && (
+                                    <>
                                 <div className=' w-full grid gap-2 grid-cols-2 md:grid-cols-3 lg:grid-cols-4'>
                                     {Object.values(SUPPORTED_SITES).map((domain) => (
                                         <div key={domain.url + domain.supported} className='space-y-px'>
@@ -297,6 +299,7 @@ const App = () => {
                                 <small className='text-zinc-400 flex gap-2 items-start'>
                                     Note: Click a site to open it in the connected browser. Currently, only sites marked green can be controlled; support for other sites will be added soon.
                                 </small>
+                                    </>)}
                             </div>
                         ))
                         .with(MESSAGE_TYPES.WAITING, () => (
@@ -314,6 +317,9 @@ const App = () => {
             </div>
 
             <footer className='flex gap-4 flex-col items-center '>
+                <a href="https://www.buymeacoffee.com/jadhavsharad" target="_blank">
+                    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" className='w-36' />
+                </a>
                 <p>Made with ❤️ by <a href="https://github.com/jadhavsharad" target="_blank" rel="noopener noreferrer">Sharad Jadhav</a></p>
             </footer>
         </div>
