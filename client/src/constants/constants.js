@@ -65,29 +65,49 @@ export const SUPPORTED_SITES = {
     url:"https://open.spotify.com",
     supported:false,
   },
+  AMAZON_MUSIC:{
+    name:"Amazon Music",
+    url:"https://music.amazon.in",
+    supported:false,
+  },
   NETFLIX:{
     name:"Netflix",
     url:"https://www.netflix.com",
-    supported:false,
+    supported:true,
   },
   PRIME_VIDEO:{
     name:"Prime Video",
     url:"https://www.primevideo.com",
-    supported:false,
+    supported:true,
   },
   DISNEY_PLUS:{
     name:"Disney Plus",
     url:"https://www.disneyplus.com",
-    supported:false,
+    supported:true,
   },
   SONY_LIV:{
     name:"Sony Liv",
     url:"https://www.sonyliv.com",
-    supported:false,
+    supported:true,
   },
   MX_PLAYER:{
     name:"MX Player",
     url:"https://www.mxplayer.in",
-    supported:false,
+    supported:true,
+  },
+  VIMEO:{
+    name:"Vimeo",
+    url:"https://vimeo.com",
+    supported:true,
+  },
+  JIOSAAVN:{
+    name:"JioSaavn",
+    url:"https://www.jiosaavn.com",
+    supported:true,
+  },
+  APPLE_MUSIC:{
+    name:"Apple Music",
+    url:"https://music.apple.com",
+    supported:true,
   },
 }

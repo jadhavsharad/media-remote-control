@@ -1,8 +1,6 @@
 // content.js
-let currentVideo = null;
+let currentMedia = null;
 let lastReportedState = null;
-let observer = null;
-
 
 const MESSAGE_TYPES = {
   STATE_UPDATE: "control.state_update",
@@ -21,12 +19,12 @@ const MEDIA_STATE = {
   TITLE: "title",             // values: string
 };
 
-function isValidVideo(video) {
+function isValidMedia(media) {
   return (
-    video instanceof HTMLVideoElement &&
-    video.isConnected &&
-    !video.disablePictureInPicture &&
-    video.readyState >= 2
+    media instanceof HTMLMediaElement &&
+    media.isConnected &&
+    (media.tagName === "AUDIO" || !media.disablePictureInPicture) &&
+    media.readyState >= 2
   );
 }
 
@@ -34,12 +32,12 @@ function isMediaState(key) {
   return Object.values(MEDIA_STATE).includes(key);
 }
 
-function getPlaybackState(video) {
-  return video.paused ? "PAUSED" : "PLAYING";
+function getPlaybackState(media) {
+  return media.paused ? "PAUSED" : "PLAYING";
 }
 
-function reportState(video) {
-  const state = getPlaybackState(video);
+function reportState(media) {
+  const state = getPlaybackState(media);
   if (state === lastReportedState) return;
 
   lastReportedState = state;
@@ -50,66 +48,65 @@ function reportState(video) {
   }
 }
 
-function detachVideo() {
-  if (!currentVideo) return;
+function detachMedia() {
+  if (!currentMedia) return;
 
-  currentVideo.removeEventListener("play", onPlay);
-  currentVideo.removeEventListener("pause", onPause);
-  currentVideo = null;
+  currentMedia.removeEventListener("play", onPlay);
+  currentMedia.removeEventListener("pause", onPause);
+  currentMedia = null;
   lastReportedState = null;
 }
 
-function attachVideo(video) {
-  if (currentVideo === video) return;
+function attachMedia(media) {
+  if (currentMedia === media) return;
 
-  detachVideo();
-  currentVideo = video;
+  detachMedia();
+  currentMedia = media;
   lastReportedState = null;
 
-  video.addEventListener("play", onPlay);
-  video.addEventListener("pause", onPause);
+  media.addEventListener("play", onPlay);
+  media.addEventListener("pause", onPause);
 
-  reportState(video);
+  reportState(media);
 }
 
 function onPlay() {
-  if (currentVideo) reportState(currentVideo);
+  if (currentMedia) reportState(currentMedia);
 }
 
 function onPause() {
-  if (currentVideo) reportState(currentVideo);
+  if (currentMedia) reportState(currentMedia);
 }
 
 
-function discoverVideo() {
-  const videos = Array
-    .from(document.querySelectorAll("video"))
-    .filter(isValidVideo);
+function discoverMedia() {
+  const mediaElements = Array
+    .from(document.querySelectorAll("video, audio"))
+    .filter(isValidMedia);
 
-  if (!videos.length) {
-    detachVideo();
+  if (!mediaElements.length) {
+    detachMedia();
     return;
   }
 
   const candidate =
-    videos.find(v => !v.paused && v.currentTime > 0) || videos[0];
+    mediaElements.find(v => !v.paused && v.currentTime > 0) || mediaElements[0];
 
-  attachVideo(candidate);
+  attachMedia(candidate);
 }
 
 function startPolling() {
-  discoverVideo();
-
+  discoverMedia();
   setInterval(() => {
-    discoverVideo();
+    discoverMedia();
   }, 2000);
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === MESSAGE_TYPES.HOST_RECONNECTED) {
-    discoverVideo();
-    if (currentVideo) {
-      reportState(currentVideo);
+    discoverMedia();
+    if (currentMedia) {
+      reportState(currentMedia);
     }
     sendResponse({ ok: true });
     return;
@@ -125,16 +122,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return;
   }
 
-  if (!currentVideo || !currentVideo.isConnected) {
-    sendResponse({ ok: false, reason: "No video" });
+  if (!currentMedia || !currentMedia.isConnected) {
+    sendResponse({ ok: false, reason: "No media" });
     return;
   }
 
   try {
     switch (msg.key) {
       case MEDIA_STATE.PLAYBACK:
-        if (msg.value === "PLAYING") currentVideo.play();
-        else currentVideo.pause();
+        msg.value === "PLAYING" ? currentMedia.play() : currentMedia.pause();
         break;
     }
     sendResponse({ ok: true });

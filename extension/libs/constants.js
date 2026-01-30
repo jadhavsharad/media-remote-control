@@ -1,11 +1,16 @@
 /* -------------------- DOMAINS -------------------- */
 export const BASE_DOMAINS = [
-  "youtube.com",
-  "netflix.com",
-  "primevideo.com",
-  "hotstar.com",
-  "vimeo.com",
-  "sonyliv.com"
+  "youtube",
+  "netflix",
+  "primevideo",
+  "hotstar",
+  "vimeo",
+  "sonyliv",
+  "jiosaavn",
+  "music.apple",
+  "mxplayer",
+  "music.amazon",
+  "spotify"
 ];
 
 /* -------------------- MESSAGE TYPES -------------------- */

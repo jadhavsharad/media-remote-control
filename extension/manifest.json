@@ -9,6 +9,28 @@
     "offscreen",
     "scripting"
   ],
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "*://*.youtube.in/*",
+    "*://*.youtube.co.uk/*",
+    "*://*.netflix.com/*",
+    "*://*.netflix.in/*",
+    "*://*.primevideo.com/*",
+    "*://*.primevideo.in/*",
+    "*://*.hotstar.com/*",
+    "*://*.hotstar.in/*",
+    "*://*.vimeo.com/*",
+    "*://*.sonyliv.com/*",
+    "*://*.sonyliv.in/*",
+    "*://*.jiosaavn.com/*",
+    "*://*.music.apple.com/*",
+    "*://*.mxplayer.com/*",
+    "*://*.mxplayer.in/*",
+    "*://*.music.amazon.com/*",
+    "*://*.music.amazon.in/*",
+    "*://*.music.amazon.co.uk/*",
+    "*://*.spotify.com/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -17,11 +39,25 @@
     {
       "matches": [
         "*://*.youtube.com/*",
+        "*://*.youtube.in/*",
+        "*://*.youtube.co.uk/*",
         "*://*.netflix.com/*",
+        "*://*.netflix.in/*",
         "*://*.primevideo.com/*",
+        "*://*.primevideo.in/*",
         "*://*.hotstar.com/*",
+        "*://*.hotstar.in/*",
         "*://*.vimeo.com/*",
-        "*://*.sonyliv.com/*"
+        "*://*.sonyliv.com/*",
+        "*://*.sonyliv.in/*",
+        "*://*.jiosaavn.com/*",
+        "*://*.music.apple.com/*",
+        "*://*.mxplayer.com/*",
+        "*://*.mxplayer.in/*",
+        "*://*.music.amazon.com/*",
+        "*://*.music.amazon.in/*",
+        "*://*.music.amazon.co.uk/*",
+        "*://*.spotify.com/*"
       ],
       "js": [
         "content.js"

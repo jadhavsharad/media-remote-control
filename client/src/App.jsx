@@ -4,7 +4,7 @@ import Html5QrcodePlugin from "./components/Html5QrcodePlugin";
 import { match, P } from "ts-pattern";
 import { MEDIA_STATE, MESSAGE_TYPES, SUPPORTED_SITES } from './constants/constants';
 import { toast } from 'sonner';
-import { IoMdPlay, IoMdPause, IoMdVolumeOff, IoMdVolumeHigh, IoMdBulb, IoMdClose, IoMdInformation, IoMdInformationCircle, IoMdInformationCircleOutline } from "react-icons/io";
+import { IoMdPlay, IoMdPause, IoMdVolumeOff, IoMdVolumeHigh, IoMdBulb,IoMdInformationCircleOutline } from "react-icons/io";
 
 const WS_URL = import.meta.env.VITE_WS_URL || "ws://172.25.174.21:3000";
 const REMOTE_VERSION = import.meta.env.VITE_REMOTE_VERSION || "1.0";
@@ -296,8 +296,8 @@ const App = () => {
                                         </div>
                                     ))}
                                 </div>
-                                <small className='text-zinc-400 flex gap-2 items-start'>
-                                    Note: Click a site to open it in the connected browser. Currently, only sites marked green can be controlled; support for other sites will be added soon.
+                                        <small className='text-zinc-400 flex gap-2 items-center'>
+                                            <IoMdInformationCircleOutline className='w-6 h-6'/> Click a site to open it in the connected browser. Currently, only sites marked green can be controlled; support for other sites will be added soon.
                                 </small>
                                     </>)}
                             </div>

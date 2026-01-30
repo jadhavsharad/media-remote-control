@@ -546,7 +546,10 @@ function isMediaUrl(url) {
   if (!url) return false;
   try {
     const { hostname } = new URL(url);
-    return BASE_DOMAINS.some(domain => hostname === domain || hostname.endsWith("." + domain));
+    return BASE_DOMAINS.some(domain => {
+      const escaped = domain.replace(/\./g, "\\.");
+      return new RegExp(`(^|\\.)${escaped}\\.[a-z]{2,}(\\.[a-z]{2,})?$`, "i").test(hostname);
+    });
   } catch {
     return false;
   }
