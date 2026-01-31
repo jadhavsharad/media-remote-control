@@ -121,6 +121,15 @@ const COMMAND_REGISTRY = {
       key: MEDIA_STATE.TIME,
       value
     });
+  },
+
+  [MEDIA_STATE.VOLUME]: async (tabId, value) => {
+    return await sendToTabSafe(tabId, {
+      type: MESSAGE_TYPES.STATE_UPDATE,
+      intent: MESSAGE_TYPES.INTENT.SET,
+      key: MEDIA_STATE.VOLUME,
+      value
+    });
   }
 };
 
@@ -209,12 +218,15 @@ receiveMessage(CHANNELS.FROM_SERVER, async (payload) => {
 receiveMessage(CHANNELS.FROM_CONTENT_SCRIPT, async (payload, sender) => {
   if (!isValidMessageType(payload.type)) return;
 
-  // REPORT means the video state changed (e.g. user paused manually)
+  // REPORT means the media state changed (e.g. user paused, changed volume, etc.)
   // We forward this to the server so the remote UI updates
   if (payload.type === MESSAGE_TYPES.STATE_UPDATE && payload.intent === MESSAGE_TYPES.INTENT.REPORT) {
     if (sender && sender.tab) {
       const tabId = sender.tab.id;
-      await mediaStore.set(tabId, { playback: payload.state });
+      const { key, value } = payload;
+      if (key) {
+        await mediaStore.set(tabId, { [key]: value });
+      }
       sendToServer({ ...payload, tabId });
     }
   }
@@ -533,6 +545,7 @@ async function sendMediaList(extra = {}) {
   const enriched = tabs.map(tab => ({
     ...tab,
     playback: mediaState[tab.tabId]?.playback || "IDLE",
+    volume: mediaState[tab.tabId]?.volume ?? 1,
     currentTime: mediaState[tab.tabId]?.currentTime || 0,
     duration: mediaState[tab.tabId]?.duration || 0
   }));

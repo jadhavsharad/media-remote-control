@@ -46,6 +46,7 @@ export const MEDIA_STATE = {
   TIME: "currentTime",        // values: number (seconds)
   DURATION: "duration",       // values: number (seconds)
   TITLE: "title",             // values: string
+  VOLUME: "volume",           // values: number (0-1)
 };
 
 

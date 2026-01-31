@@ -1,6 +1,6 @@
 // content.js
 let currentMedia = null;
-let lastReportedState = null;
+let lastReportedState = {};
 
 const MESSAGE_TYPES = {
   STATE_UPDATE: "control.state_update",
@@ -17,8 +17,19 @@ const MEDIA_STATE = {
   TIME: "currentTime",        // values: number (seconds)
   DURATION: "duration",       // values: number (seconds)
   TITLE: "title",             // values: string
+  VOLUME: "volume",           // values: number (0-1)
 };
 
+/**
+ * Validates that a key is a known MEDIA_STATE property
+ */
+function isMediaState(key) {
+  return Object.values(MEDIA_STATE).includes(key);
+}
+
+/**
+ * Checks if a media element is valid for control
+ */
 function isValidMedia(media) {
   return (
     media instanceof HTMLMediaElement &&
@@ -28,19 +39,15 @@ function isValidMedia(media) {
   );
 }
 
-function isMediaState(key) {
-  return Object.values(MEDIA_STATE).includes(key);
-}
+/**
+ * Generic state reporting function - reports any MEDIA_STATE property
+ * Only sends update if value has changed (diffing)
+ */
+function reportMediaState(key, value) {
+  // Skip if value hasn't changed
+  if (lastReportedState[key] === value) return;
 
-function getPlaybackState(media) {
-  return media.paused ? "PAUSED" : "PLAYING";
-}
-
-function reportState(media) {
-  const state = getPlaybackState(media);
-  if (state === lastReportedState) return;
-
-  lastReportedState = state;
+  lastReportedState[key] = value;
 
   try {
     chrome.runtime.sendMessage({ type: "receive.from.content_script", payload: { type: MESSAGE_TYPES.STATE_UPDATE, state, intent: MESSAGE_TYPES.INTENT.REPORT, }, }).catch(() => { });
@@ -48,13 +55,68 @@ function reportState(media) {
   }
 }
 
+/**
+ * Reports all tracked media properties
+ */
+function reportAllStates(media) {
+  reportMediaState(MEDIA_STATE.PLAYBACK, media.paused ? "PAUSED" : "PLAYING");
+  reportMediaState(MEDIA_STATE.VOLUME, media.volume);
+  reportMediaState(MEDIA_STATE.DURATION, media.duration || 0);
+  // Note: currentTime is intentionally not auto-reported to avoid spam
+  // It should be reported on-demand or with debouncing for progress updates
+}
+
+/**
+ * Gets a snapshot of all media properties
+ */
+function getMediaSnapshot(media) {
+  return {
+    [MEDIA_STATE.PLAYBACK]: media.paused ? "PAUSED" : "PLAYING",
+    [MEDIA_STATE.VOLUME]: media.volume,
+    [MEDIA_STATE.MUTE]: media.muted,
+    [MEDIA_STATE.DURATION]: media.duration || 0,
+    [MEDIA_STATE.TIME]: media.currentTime || 0,
+  };
+}
+
+// ============================================================================
+// EVENT HANDLERS
+// ============================================================================
+
+function onPlay() {
+  if (currentMedia) reportMediaState(MEDIA_STATE.PLAYBACK, "PLAYING");
+}
+
+function onPause() {
+  if (currentMedia) reportMediaState(MEDIA_STATE.PLAYBACK, "PAUSED");
+}
+
+function onVolumeChange() {
+  if (currentMedia) {
+    reportMediaState(MEDIA_STATE.VOLUME, currentMedia.volume);
+  }
+}
+
+function onDurationChange() {
+  if (currentMedia) {
+    reportMediaState(MEDIA_STATE.DURATION, currentMedia.duration || 0);
+  }
+}
+
+// ============================================================================
+// MEDIA ATTACHMENT / DETACHMENT
+// ============================================================================
+
 function detachMedia() {
   if (!currentMedia) return;
 
   currentMedia.removeEventListener("play", onPlay);
   currentMedia.removeEventListener("pause", onPause);
+  currentMedia.removeEventListener("volumechange", onVolumeChange);
+  currentMedia.removeEventListener("durationchange", onDurationChange);
+
   currentMedia = null;
-  lastReportedState = null;
+  lastReportedState = {};
 }
 
 function attachMedia(media) {
@@ -62,22 +124,21 @@ function attachMedia(media) {
 
   detachMedia();
   currentMedia = media;
-  lastReportedState = null;
+  lastReportedState = {};
 
+  // Attach all event listeners
   media.addEventListener("play", onPlay);
   media.addEventListener("pause", onPause);
+  media.addEventListener("volumechange", onVolumeChange);
+  media.addEventListener("durationchange", onDurationChange);
 
-  reportState(media);
+  // Report initial state for all tracked properties
+  reportAllStates(media);
 }
 
-function onPlay() {
-  if (currentMedia) reportState(currentMedia);
-}
-
-function onPause() {
-  if (currentMedia) reportState(currentMedia);
-}
-
+// ============================================================================
+// MEDIA DISCOVERY
+// ============================================================================
 
 function discoverMedia() {
   const mediaElements = Array
@@ -102,16 +163,49 @@ function startPolling() {
   }, 2000);
 }
 
+// ============================================================================
+// COMMAND HANDLERS - Execute commands from remote
+// ============================================================================
+
+const COMMAND_HANDLERS = {
+  [MEDIA_STATE.PLAYBACK]: (media, value) => {
+    if (value === "PLAYING") {
+      media.play();
+    } else {
+      media.pause();
+    }
+  },
+
+  [MEDIA_STATE.VOLUME]: (media, value) => {
+    // Clamp value between 0 and 1
+    const vol = Math.max(0, Math.min(1, Number(value)));
+    media.volume = vol;
+  },
+
+  [MEDIA_STATE.TIME]: (media, value) => {
+    const time = Number(value);
+    if (!isNaN(time) && time >= 0) {
+      media.currentTime = time;
+    }
+  },
+};
+
+// ============================================================================
+// MESSAGE LISTENER
+// ============================================================================
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Handle host reconnection - re-report state
   if (msg.type === MESSAGE_TYPES.HOST_RECONNECTED) {
     discoverMedia();
     if (currentMedia) {
-      reportState(currentMedia);
+      reportAllStates(currentMedia);
     }
     sendResponse({ ok: true });
     return;
   }
 
+  // Validate message structure
   if (
     !msg ||
     msg.type !== MESSAGE_TYPES.STATE_UPDATE ||
@@ -122,22 +216,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return;
   }
 
+  // Validate media availability
   if (!currentMedia || !currentMedia.isConnected) {
     sendResponse({ ok: false, reason: "No media" });
     return;
   }
 
+  // Execute command
   try {
-    switch (msg.key) {
-      case MEDIA_STATE.PLAYBACK:
-        msg.value === "PLAYING" ? currentMedia.play() : currentMedia.pause();
-        break;
+    const handler = COMMAND_HANDLERS[msg.key];
+    if (handler) {
+      handler(currentMedia, msg.value);
+      sendResponse({ ok: true });
+    } else {
+      sendResponse({ ok: false, reason: `Unknown key: ${msg.key}` });
     }
-    sendResponse({ ok: true });
   } catch (err) {
     console.error("Control Event Error:", err);
     sendResponse({ error: err.message });
   }
 });
 
+// Start the polling loop
 startPolling();

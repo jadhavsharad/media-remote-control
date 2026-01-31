@@ -4,7 +4,8 @@ import Html5QrcodePlugin from "./components/Html5QrcodePlugin";
 import { match, P } from "ts-pattern";
 import { MEDIA_STATE, MESSAGE_TYPES, SUPPORTED_SITES } from './constants/constants';
 import { toast } from 'sonner';
-import { IoMdPlay, IoMdPause, IoMdVolumeOff, IoMdVolumeHigh, IoMdBulb,IoMdInformationCircleOutline } from "react-icons/io";
+import { IoMdPlay, IoMdPause, IoMdVolumeOff, IoMdBulb, IoMdInformationCircleOutline, IoMdVolumeMute } from "react-icons/io";
+import VolumeSlider from "./components/ui/VolumeSlider";
 
 const WS_URL = import.meta.env.VITE_WS_URL || "ws://172.25.174.21:3000";
 const REMOTE_VERSION = import.meta.env.VITE_REMOTE_VERSION || "1.0";
@@ -71,6 +72,11 @@ const App = () => {
         sendToActiveTab(MEDIA_STATE.MUTE, !activeTab.muted);
     };
 
+    const handleVolumeChange = (value) => {
+        if (!activeTab) return;
+        sendToActiveTab(MEDIA_STATE.VOLUME, value);
+    };
+
 
     const trustTokenRef = useRef(getToken());
     const wsRef = useRef(null);
@@ -130,9 +136,6 @@ const App = () => {
         };
     }, []);
 
-    useEffect(() => {
-        handleMessageRef.current = handleMessage;
-    });
 
     const handleMessage = (msg) => {
         if (!msg?.type) return;
@@ -185,16 +188,21 @@ const App = () => {
                     if (!tab) return prev; // if the tab does not exist, return the previous state
 
                     return {
-                        ...prev, // spread the previous state, do not mutate the previous state
+                        ...prev,
                         [m.tabId]: {
-                            ...tab, // spread the previous tab, do not mutate the previous state
-                            playback: m.state // update the playback state
+                            ...tab,
+                            [m.key]: m.value
                         }
                     };
                 });
             })
             .otherwise(() => { }); // do nothing
     };
+
+        useEffect(() => {
+        handleMessageRef.current = handleMessage;
+    });
+
 
     // Handle QR code scan
     const onScanSuccess = useCallback((decodedText) => {
@@ -255,7 +263,7 @@ const App = () => {
                         ))
                         .with(MESSAGE_TYPES.PAIR_SUCCESS, () => (
                             <div className="flex flex-col gap-6" data-testid="paired-container">
-                                <div className="flex justify-between">
+                                <div className="flex justify-between text-sm">
                                     <p>
                                         <small className="text-zinc-400">Connection information</small>{" "}
                                         <br />
@@ -275,13 +283,14 @@ const App = () => {
                                     </div>
                                 </div>
 
-                                <div className="flex gap-4">
-                                    <button disabled={!activeTab} onClick={handleTogglePlayback} className="cursor-pointer bg-zinc-900 text-white flex items-center justify-center gap-2 py-2 px-4 w-fit disabled:text-zinc-600">
+                                <div className="flex flex-wrap gap-2 w-full h-full ">
+                                    <button disabled={!activeTab} onClick={handleTogglePlayback} className="cursor-pointer bg-zinc-900 text-white flex items-center justify-center gap-2 py-2 px-4 w-fit disabled:text-zinc-600 text-xs">
                                         {activeTab?.playback === "IDLE" ? <><IoMdBulb /> Idle </> : activeTab?.playback === "PLAYING" ? <><IoMdPause /> Pause</> : <><IoMdPlay /> Play</>}
                                     </button>
-                                    <button disabled={!activeTab} onClick={handleToggleMute} className="cursor-pointer bg-zinc-900 text-white flex items-center justify-center gap-2 py-2 px-4 w-fit disabled:text-zinc-600">
-                                        {activeTab?.muted ? <><IoMdVolumeOff /> Unmute</> : <><IoMdVolumeHigh /> Mute</>}
+                                    <button disabled={!activeTab} onClick={handleToggleMute} className="cursor-pointer bg-zinc-900 text-white flex items-center justify-center gap-2 py-2 px-4 w-fit disabled:text-zinc-600 text-xs">
+                                        {activeTab?.muted ? <><IoMdVolumeOff /> Unmute</> : <><IoMdVolumeMute /> Mute</>}
                                     </button>
+                                    <VolumeSlider value={activeTab?.volume ?? 1} disabled={!activeTab} onChange={handleVolumeChange} />
                                 </div>
                                 {hostInfo?.extensionVersion && (
                                     <>
@@ -297,7 +306,7 @@ const App = () => {
                                     ))}
                                 </div>
                                         <small className='text-zinc-400 flex gap-2 items-center'>
-                                            <IoMdInformationCircleOutline className='w-6 h-6'/> Click a site to open it in the connected browser. Currently, only sites marked green can be controlled; support for other sites will be added soon.
+                                            <IoMdInformationCircleOutline className='w-6 h-6' /> Click a site to open it in the connected browser. Currently, only sites marked green can be controlled; support for other sites will be added soon.
                                 </small>
                                     </>)}
                             </div>
