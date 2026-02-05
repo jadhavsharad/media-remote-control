@@ -23,7 +23,6 @@ const STATUS_COLORS = {
 
 
 const App = () => {
-    console.log(LEAST_EXTENSION_VERSION)
     const {
         status,
         hostInfo,
@@ -50,7 +49,7 @@ const App = () => {
 
 
     return (
-        <div className='min-h-screen bg-black text-zinc-100 px-4 py-6 flex items-center justify-center'>
+        <div className='min-h-screen bg-black text-zinc-100 px-4 py-6 flex flex-col items-center justify-center gap-4'>
             <main className='max-w-md min-w-sm w-full border border-zinc-800 rounded-2xl'>
                 <header className='p-4 space-y-3'>
                     {/* Main Header Row */}
@@ -165,7 +164,7 @@ const App = () => {
                                                 </button>
                                             </div>
                                             {
-                                                Number.parseFloat(hostInfo?.extensionVersion || 1.0) >= Number.parseFloat(LEAST_EXTENSION_VERSION) && (
+                                                Number.parseFloat(hostInfo?.extensionVersion) >= Number.parseFloat(LEAST_EXTENSION_VERSION) && (
                                                     <VolumeControl activeTab={activeTab} onVolumeChange={(value) => updateTabState(activeTabId, MEDIA_STATE.VOLUME, value)} />
                                                 )
                                             }
@@ -217,7 +216,7 @@ const App = () => {
                                 </section>
 
                                 {
-                                   Number.parseFloat(hostInfo?.extensionVersion || 0) >= Number.parseFloat(LEAST_EXTENSION_VERSION) && (
+                                    Number.parseFloat(hostInfo?.extensionVersion) >= Number.parseFloat(LEAST_EXTENSION_VERSION) && (
                                         <section className=''>
                                             <div className="flex items-center gap-2 my-2">
                                                 <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Quick Launch: One tap open</h4>
@@ -250,6 +249,12 @@ const App = () => {
                         .otherwise(() => null)}
                 </div>
             </main>
+            <footer className='flex flex-col gap-4  items-center justify-center'>
+                <a href="https://www.buymeacoffee.com/jadhavsharad" target="_blank" className="transform hover:scale-105 transition-transform">
+                    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" className='w-36' />
+                </a>
+                <p className="text-xs">Made with ❤️ by <a href="https://github.com/jadhavsharad" className=" underline">Sharad Jadhav</a></p>
+            </footer>
         </div>
     )
 }

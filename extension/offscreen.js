@@ -5,7 +5,7 @@ import { CHANNELS, MESSAGE_TYPES } from "./libs/constants.js";
 let socket = null;
 let reconnect = null;
 let userDisconnected = false; // Prevents auto-reconnect after user disconnect
-const WS_URL = "ws://localhost:3000";
+const WS_URL = "wss://media-remote-control-service.onrender.com/";
 
 function connect() {
     socket = new WebSocket(WS_URL);
