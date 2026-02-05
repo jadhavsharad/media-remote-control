@@ -1,249 +1,99 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import GlowDot from "./components/ui/glowDot";
+import React from 'react'
 import Html5QrcodePlugin from "./components/Html5QrcodePlugin";
 import { match, P } from "ts-pattern";
-import { MEDIA_STATE, MESSAGE_TYPES, SUPPORTED_SITES } from './constants/constants';
-import { toast } from 'sonner';
-import { IoMdPlay, IoMdPause, IoMdVolumeOff, IoMdBulb, IoMdInformationCircleOutline, IoMdVolumeMute } from "react-icons/io";
-import VolumeSlider from "./components/ui/VolumeSlider";
+import { MEDIA_STATE, MESSAGE_TYPES } from './constants/constants';
+import { GoUnlink } from "react-icons/go";
+import { useRemoteConnection } from './hooks/useRemoteConnection';
+import GlowDot from './components/ui/glowDot';
+import VolumeControl from './components/ui/VolumeControl';
+import QuickLaunchGrid from './components/ui/QuickLaunch';
+import { IoMdDesktop, IoMdPlay, IoMdPause, IoMdVolumeOff, IoMdBulb, IoMdGlobe } from "react-icons/io";
 
-const WS_URL = import.meta.env.VITE_WS_URL || "ws://172.25.174.21:3000";
-const REMOTE_VERSION = import.meta.env.VITE_REMOTE_VERSION || "1.0";
-const EXTENSION_VERSION = import.meta.env.VITE_EXTENSION_VERSION || "Unknown";
-const RECONNECT_DELAY = 2000;
-
+const REMOTE_VERSION = import.meta.env.VITE_REMOTE_VERSION;
+const LEAST_EXTENSION_VERSION = import.meta.env.VITE_LEAST_EXTENSION_VERSION;
 
 const STATUS_COLORS = {
-    [MESSAGE_TYPES.PAIR_SUCCESS]: "bg-green-500 border-green-400",
-    [MESSAGE_TYPES.CONNECTING]: "bg-yellow-500 border-yellow-400",
-    [MESSAGE_TYPES.CONNECTED]: "bg-blue-500 border-blue-400",
-    [MESSAGE_TYPES.VERIFYING]: "bg-orange-500 border-orange-400",
-    [MESSAGE_TYPES.DISCONNECTED]: "bg-red-500 border-red-400",
-    [MESSAGE_TYPES.WAITING]: "bg-zinc-50 border-zinc-50",
+    [MESSAGE_TYPES.PAIR_SUCCESS]: "bg-green-500",
+    [MESSAGE_TYPES.CONNECTING]: "bg-yellow-500",
+    [MESSAGE_TYPES.CONNECTED]: "bg-blue-500",
+    [MESSAGE_TYPES.VERIFYING]: "bg-orange-500",
+    [MESSAGE_TYPES.DISCONNECTED]: "bg-red-500",
+    [MESSAGE_TYPES.WAITING]: "bg-zinc-500",
 };
 
 
 const App = () => {
+    console.log(LEAST_EXTENSION_VERSION)
+    const {
+        status,
+        hostInfo,
+        tabsById,
+        activeTab,
+        activeTabId,
+        pair,
+        updateTabState,
+        selectTab,
+        disconnect,
+        openNewTab
+    } = useRemoteConnection();
 
-    const [status, setStatus] = useState(MESSAGE_TYPES.DISCONNECTED);
-    const [tabsById, setTabsById] = useState({});
-    const [activeTabId, setActiveTabId] = useState(null);
-    const activeTab = activeTabId ? tabsById[activeTabId] : null;
-    const [hostInfo, setHostInfo] = useState(null);
-
-    const isConnecting = () => { return wsRef.current?.readyState === WebSocket.CONNECTING }
-    const isOpen = () => { return wsRef.current?.readyState === WebSocket.OPEN }
-    const setToken = (token) => { token ? (localStorage.setItem("trust_token", token), trustTokenRef.current = token) : (localStorage.removeItem("trust_token"), trustTokenRef.current = null) }
-    const getToken = () => { const t = localStorage.getItem("trust_token"); return t && t !== "null" ? t : null; }
-
-    const send = useCallback((msg) => {
-        if (!isOpen()) return;
-        wsRef.current.send(JSON.stringify(msg));
-    }, []);
-
-    const sendToActiveTab = useCallback((key, value) => {
-        if (!isOpen()) return;
-        if (!activeTabId) { toast.error("Select a tab first"); return }
-
-        send({
-            type: MESSAGE_TYPES.STATE_UPDATE,
-            intent: MESSAGE_TYPES.INTENT.SET,
-            key,
-            value,
-            tabId: activeTabId
-        });
-    }, [activeTabId, send]);
-
-    const activateTab = (tabId) => { setActiveTabId(tabId); send({ type: MESSAGE_TYPES.SELECT_ACTIVE_TAB, tabId }); }
-    const deactivateTab = () => { setActiveTabId(null); }
-    const handleDisconnect = () => {
-        setToken(null);
-        setStatus(MESSAGE_TYPES.DISCONNECTED);
-        globalThis.location.reload();
-    }
-
+    // Handlers
     const handleTogglePlayback = () => {
         if (!activeTab) return;
-        sendToActiveTab(MEDIA_STATE.PLAYBACK, activeTab.playback === "PLAYING" ? "PAUSED" : "PLAYING");
+        updateTabState(activeTabId, MEDIA_STATE.PLAYBACK, activeTab.playback === "PLAYING" ? "PAUSED" : "PLAYING");
     };
 
     const handleToggleMute = () => {
         if (!activeTab) return;
-        sendToActiveTab(MEDIA_STATE.MUTE, !activeTab.muted);
+        updateTabState(activeTabId, MEDIA_STATE.MUTE, !activeTab.muted);
     };
 
-    const handleVolumeChange = (value) => {
-        if (!activeTab) return;
-        sendToActiveTab(MEDIA_STATE.VOLUME, value);
-    };
-
-
-    const trustTokenRef = useRef(getToken());
-    const wsRef = useRef(null);
-    const isMounted = useRef(true);
-    const reconnectTimeoutRef = useRef(null);
-    const handleMessageRef = useRef(null);
-
-    useEffect(() => {
-        isMounted.current = true;
-        const connect = () => {
-            if (isOpen() || isConnecting()) return;
-
-            setStatus(MESSAGE_TYPES.CONNECTING);
-
-            const ws = new WebSocket(WS_URL);
-
-            ws.onopen = () => {
-                if (!isMounted.current) return;
-
-                const token = trustTokenRef.current;
-
-                if (token) {
-                    setStatus(MESSAGE_TYPES.VERIFYING);
-                    send({ type: MESSAGE_TYPES.VALIDATE_SESSION, trustToken: token });
-                } else {
-                    setStatus(MESSAGE_TYPES.CONNECTED);
-                }
-            };
-
-            ws.onclose = () => {
-                if (!isMounted.current) return;
-                setStatus(MESSAGE_TYPES.DISCONNECTED);
-                reconnectTimeoutRef.current = setTimeout(connect, RECONNECT_DELAY);
-            };
-
-            ws.onerror = (e) => {
-                log("onerror", e);
-            };
-
-            ws.onmessage = (event) => {
-                try {
-                    const msg = JSON.parse(event.data);
-                    handleMessageRef.current?.(msg);
-                } catch (e) {
-                    console.error("Invalid WS message", e);
-                }
-            };
-            wsRef.current = ws;
-        };
-
-        connect();
-
-        return () => {
-            isMounted.current = false;
-            wsRef.current?.close();
-            clearTimeout(reconnectTimeoutRef.current);
-        };
-    }, [send]);
-
-
-    const handleMessage = (msg) => {
-        if (!msg?.type) return;
-
-        match(msg)
-            .with({ type: MESSAGE_TYPES.PAIR_SUCCESS }, (m) => {
-                setToken(m.trustToken); // set the token in the ref
-                setHostInfo(m.hostInfo);
-                setStatus(MESSAGE_TYPES.PAIR_SUCCESS); // set the status to PAIR_SUCCESS
-                toast.success("Pairing successful");
-            })
-            .with({ type: MESSAGE_TYPES.PAIR_FAILED }, () => {
-                toast.error("Pairing failed");
-                setStatus(MESSAGE_TYPES.DISCONNECTED); // set the status to DISCONNECTED
-                globalThis.location.reload();
-            })
-            .with({ type: MESSAGE_TYPES.SESSION_VALID }, (m) => {
-                setHostInfo(m.hostInfo);
-                setStatus(MESSAGE_TYPES.PAIR_SUCCESS); // set the status to PAIR_SUCCESS
-                toast.success("Session valid");
-            })
-            .with({ type: MESSAGE_TYPES.SESSION_INVALID }, () => {
-                setToken(null); // set the token in the ref to null
-                setStatus(MESSAGE_TYPES.DISCONNECTED); // set the status to DISCONNECTED
-                toast.error("Session invalid");
-                globalThis.location.reload();
-            })
-            .with({ type: MESSAGE_TYPES.HOST_DISCONNECTED }, () => {
-                setStatus(MESSAGE_TYPES.WAITING); // set the status to WAITING
-                toast.error("Host disconnected");
-                globalThis.location.reload();
-            })
-            .with({ type: MESSAGE_TYPES.MEDIA_LIST, tabs: P.array() }, (m) => {
-                setTabsById(prev => {
-                    const next = {}; // create a new object, copy the previous state
-                    for (const tab of m.tabs) { // update each tab in the new object
-                        next[tab.tabId] = { // update the tab in the new object
-                            ...prev[tab.tabId], // keep playback state if exists
-                            ...tab // update the tab
-                        };
-                    }
-
-                    return next;
-                });
-            })
-
-            .with({ type: MESSAGE_TYPES.STATE_UPDATE }, (m) => {
-                setTabsById(prev => {
-                    const tab = prev[m.tabId]; // get the tab from the previous state
-                    if (!tab) return prev; // if the tab does not exist, return the previous state
-
-                    return {
-                        ...prev,
-                        [m.tabId]: {
-                            ...tab,
-                            [m.key]: m.value
-                        }
-                    };
-                });
-            })
-            .otherwise(() => { }); // do nothing
-    };
-
-        useEffect(() => {
-        handleMessageRef.current = handleMessage;
-    });
-
-
-    // Handle QR code scan
-    const onScanSuccess = useCallback((decodedText) => {
-        if (!decodedText) return;
-
-        if (isOpen()) {
-            send({ type: MESSAGE_TYPES.EXCHANGE_PAIR_KEY, code: decodedText }); // send the pair key to the server
-            setStatus(MESSAGE_TYPES.VERIFYING);
-        }
-    }, [send]);
-
-    
-    const triggerNewTab = (url) => {
-        send({ type: MESSAGE_TYPES.NEW_TAB, url });
-    }
 
     return (
-        <div className=" min-h-screen flex flex-col gap-4 items-center justify-center text-white antialiased px-4 font-sans">
-            <div className="w-full max-w-2xl bg-zinc-950 p-4 border border-zinc-800">
-                <header className="gap-4 flex flex-row justify-between">
-                    <h1 className="font-bold ">Media Remote Control</h1>
-                    <div className="w-px min-h-full bg-zinc-700"></div>
-                    <div className="flex items-center gap-2 text-xs">
-                        <GlowDot colorClass={STATUS_COLORS[status]} />
-                        <span className="z-10">Socket Status : {status}</span>
+        <div className='min-h-screen bg-black text-zinc-100 px-4 py-6 flex items-center justify-center'>
+            <main className='max-w-md min-w-sm w-full border border-zinc-800 rounded-2xl'>
+                <header className='p-4 space-y-3'>
+                    {/* Main Header Row */}
+                    <div className='flex items-center justify-between'>
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+                                <IoMdDesktop className="text-zinc-400" size={18} />
+                            </div>
+                            <div className="leading-tight">
+                                <h1 className='font-semibold text-sm text-zinc-100'>Media Remote</h1>
+                                <p className="text-[10px] text-zinc-600">v{REMOTE_VERSION}</p>
+                            </div>
+                        </div>
+                        <div className='flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-900/80 border border-zinc-800/60'>
+                            <GlowDot colorClass={STATUS_COLORS[status]} />
+                            <span className='text-[10px] font-medium text-zinc-400 uppercase tracking-wide'>{status}</span>
+                        </div>
                     </div>
-                </header>
-                <div className="flex flex-row justify-between">
-                    <small className='text-zinc-400 text-xs'> Remote Version : {REMOTE_VERSION}</small>
-                    <small className="text-zinc-400 text-xs">
-                    {match(status)
-                        .with(MESSAGE_TYPES.CONNECTED, () => "Connected to server. Waiting to pair")
-                        .with(MESSAGE_TYPES.DISCONNECTED, () => "Disconnected with server.")
-                        .with(MESSAGE_TYPES.PAIR_SUCCESS, () => "Successfully paired with device.")
-                        .with(MESSAGE_TYPES.CONNECTING, () => "Connecting with server.")
-                        .otherwise(() => null)}
-                </small>
-                </div>
-                <div className="w-full h-px bg-zinc-700 my-2"></div>
 
-                <div>
+                    {hostInfo && (
+                        <div className='flex items-center justify-between py-2 px-3 rounded-lg bg-zinc-900/50 border border-zinc-800/40'>
+                            <div className="flex items-center gap-1.5 text-[10px] text-zinc-500">
+                                <span className="text-zinc-400 capitalize">{hostInfo?.os}</span>
+                                <span className="text-zinc-700">•</span>
+                                <span className="capitalize">{hostInfo?.browser}</span>
+                                <span className="text-zinc-700">•</span>
+                                {hostInfo?.extensionVersion >= LEAST_EXTENSION_VERSION ? (
+                                    <span className="text-zinc-600">v{hostInfo?.extensionVersion}</span>
+                                ) : (
+                                    <span className='text-amber-400 font-medium'>Update Extension</span>
+                                )}
+                            </div>
+                            <button className='text-[10px] font-medium text-red-500 px-2 py-1 rounded hover:bg-red-500/10 cursor-pointer transition-colors duration-150 flex items-center gap-1' onClick={disconnect}>
+                                <GoUnlink size={10} />
+                                <span>Unpair</span>
+                            </button>
+                        </div>
+                    )}
+                </header>
+
+                <div className="h-px bg-zinc-800/80 mx-4" />
+
+                <div className="flex-1 p-4 md:px-4 md:pb-4 ">
                     {match(status)
                         .with(MESSAGE_TYPES.CONNECTED, () => (
                             <div className="flex flex-col gap-4" data-testid="scanner-container">
@@ -251,86 +101,155 @@ const App = () => {
                                     fps={10}
                                     qrbox={250}
                                     disableFlip={false}
-                                    qrCodeSuccessCallback={onScanSuccess}
+                                    qrCodeSuccessCallback={pair}
                                 />
                             </div>
                         ))
                         .with(P.union(MESSAGE_TYPES.CONNECTING, MESSAGE_TYPES.VERIFYING), () => (
-                            <div className="flex flex-col items-center gap-4 py-12" data-testid="loading-container">
-                                <div className="animate-spin h-8 w-8 border-4 border-zinc-700 border-t-zinc-400 rounded-full" />
-                                <div className="text-sm uppercase">{status}</div>
+                            <div className="py-20 flex flex-col items-center justify-center gap-4 text-zinc-500">
+                                <div className="w-8 h-8 border-2 border-zinc-800 border-t-zinc-400 rounded-full animate-spin" />
+                                <span className="text-sm">Establish connection...</span>
                             </div>
                         ))
                         .with(MESSAGE_TYPES.PAIR_SUCCESS, () => (
-                            <div className="flex flex-col gap-6" data-testid="paired-container">
-                                <div className="flex justify-between text-sm">
-                                    <p>
-                                        <small className="text-zinc-400">Connection information</small>{" "}
-                                        <br />
-                                        OS: {hostInfo?.os ? <span className="capitalize">{hostInfo?.os}</span> : "Unknown"} <br />
-                                        Browser: {hostInfo?.browser ? hostInfo?.browser : "Unknown"} <br />
-                                        Extension: {hostInfo?.extensionVersion ? "v" + hostInfo?.extensionVersion : <small className="text-red-400">Unknown (Please Try To Update Your Extension)</small>} <br />
-                                        Media Tabs open: {(Object.keys(tabsById).length < 10) ? `0${Object.keys(tabsById).length}` : Object.keys(tabsById).length}
-                                    </p>
-                                    <button onClick={handleDisconnect} className="text-xs text-red-400 bg-red-500/10 px-4 py-2  cursor-pointer h-fit" data-testid="unpair-btn">{" "} Unpair</button>
-                                </div>
+                            <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-500 transition-all overflow-hidden">
+                                <section className=''>
+                                    <main className='flex flex-col items-center justify-center gap-2'>
+                                        {activeTab ? (
+                                            <div className='w-full px-4'>
+                                                <div className='flex items-center gap-3'>
+                                                    {
+                                                        activeTab?.url ? (
+                                                            <img key={activeTab?.url} src={`https://www.google.com/s2/favicons?sz=64&domain=${activeTab?.url}`} alt="" className="w-8 h-8 shadow-sm" />
+                                                        ) : (
+                                                            <div className="w-8 h-8 bg-zinc-800 flex items-center justify-center"><IoMdGlobe className="text-zinc-500" size={20} /></div>
+                                                        )
+                                                    }
+                                                    <div className='flex-1 min-w-0 flex flex-col justify-center'>
+                                                        <div className='truncate text-sm font-medium text-zinc-100 leading-tight block mb-0.5'>{activeTab?.title || "Unknown title"}</div>
+                                                        <a href={activeTab?.url} target="_blank" rel="noreferrer" className='text-xs text-zinc-500 truncate hover:text-zinc-400 transition-colors block'>{activeTab?.url || "Unknown URL"}</a>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className='flex flex-col gap-2 p-6 w-full items-center justify-center text-center border border-dashed border-zinc-800 rounded-xl'>
+                                                <span className='font-medium text-sm text-zinc-400'>
+                                                    No Tab Selected
+                                                </span>
+                                                <small className='text-xs text-zinc-600'>
+                                                    Select a media tab to view controls
+                                                </small>
+                                            </div>
+                                        )}
 
-                                <div className="max-h-96 overflow-y-auto custom-scrollbar">
-                                    <div className="flex flex-col gap-2 w-full">
-                                        {Object.values(tabsById).map((tab) => (
-                                            <button key={tab.tabId} onClick={() => activateTab(tab.tabId)} className={`w-full flex items-center gap-4 text-left truncate cursor-pointer p-4 ${activeTabId === tab.tabId ? "bg-white text-black" : "bg-zinc-800 text-zinc-400"}`}><img src={tab.favIconUrl} alt={tab.title} className="w-6 h-6" /><small>{tab.title}</small></button>
-                                        ))}
-                                    </div>
-                                </div>
+                                        <div className="w-full overflow-hidden p-2 space-y-2">
+                                            <div className="flex gap-2">
+                                                <button disabled={!activeTab} onClick={handleTogglePlayback} className={`group py-2 flex-1 bg-zinc-900 hover:bg-zinc-800 rounded-lg flex items-center justify-between px-4 transition-all duration-200 disabled:opacity-50 active:scale-[0.98] disabled:cursor-not-allowed cursor-pointer`}>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-300 ${activeTab?.playback === 'PLAYING' ? 'bg-green-500 text-zinc-950' : activeTab?.playback === 'PAUSED' ? 'bg-blue-600 text-zinc-50' : 'bg-zinc-800 text-zinc-50'}`}>
+                                                            {activeTab?.playback === 'PLAYING' ? <IoMdPause size={20} /> : <IoMdPlay className="ml-0.5" size={20} />}
+                                                        </div>
+                                                        <div className="flex flex-col items-start gap-0.5">
+                                                            <span className={`text-xs font-semibold uppercase tracking-wider 'text-zinc-100' `}>
+                                                                {activeTab?.playback || 'Idle'}
+                                                            </span>
+                                                            <span className="text-[10px] text-zinc-500 font-medium">
+                                                                {activeTab?.playback === 'PLAYING' ? 'Tap to pause' : 'Tap to play'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </button>
 
-                                <div className="flex flex-wrap gap-2 w-full h-full ">
-                                    <button disabled={!activeTab} onClick={handleTogglePlayback} className="cursor-pointer bg-zinc-900 text-white flex items-center justify-center gap-2 py-2 px-4 w-fit disabled:text-zinc-600 text-xs">
-                                        {activeTab?.playback === "IDLE" ? <><IoMdBulb /> Idle </> : activeTab?.playback === "PLAYING" ? <><IoMdPause /> Pause</> : <><IoMdPlay /> Play</>}
-                                    </button>
-                                    <button disabled={!activeTab} onClick={handleToggleMute} className="cursor-pointer bg-zinc-900 text-white flex items-center justify-center gap-2 py-2 px-4 w-fit disabled:text-zinc-600 text-xs">
-                                        {activeTab?.muted ? <><IoMdVolumeOff /> Unmute</> : <><IoMdVolumeMute /> Mute</>}
-                                    </button>
-                                    <VolumeSlider value={activeTab?.volume ?? 1} disabled={!activeTab} onChange={handleVolumeChange} />
-                                </div>
-                                {hostInfo?.extensionVersion && (
-                                    <>
-                                <div className=' w-full grid gap-2 grid-cols-2 md:grid-cols-3 lg:grid-cols-4'>
-                                    {Object.values(SUPPORTED_SITES).map((domain) => (
-                                        <div key={domain.url + domain.supported} className='space-y-px'>
-                                            <button onClick={() => triggerNewTab(domain.url)} className="cursor-pointer w-full overflow-hidden bg-zinc-900 text-white flex items-center gap-2 py-2 px-4 disabled:text-zinc-600">
-                                                <img className='w-6 h-6' src={`https://www.google.com/s2/favicons?sz=64&domain=${domain.url}`} alt={domain.url} />
-                                                <small className='capitalize'>{domain.name}</small>
-                                            </button>
-                                            <div className={`w-full h-px ${domain.supported ? "bg-green-500/75" : "bg-red-500/75"}`}></div>
+                                                <button disabled={!activeTab} onClick={handleToggleMute} className={`w-fit px-6 bg-zinc-900 hover:bg-zinc-800 rounded-lg flex items-center justify-center transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-[0.98] ${activeTab?.muted ? 'text-red-500 bg-red-500/10 hover:bg-red-500/20' : 'text-zinc-400 hover:text-zinc-200'}`}>
+                                                    <IoMdVolumeOff size={24} />
+                                                </button>
+                                            </div>
+                                            {
+                                                Number.parseFloat(hostInfo?.extensionVersion || 1.0) >= Number.parseFloat(LEAST_EXTENSION_VERSION) && (
+                                                    <VolumeControl activeTab={activeTab} onVolumeChange={(value) => updateTabState(activeTabId, MEDIA_STATE.VOLUME, value)} />
+                                                )
+                                            }
                                         </div>
-                                    ))}
-                                </div>
-                                        <small className='text-zinc-400 flex gap-2 items-center'>
-                                            <IoMdInformationCircleOutline className='w-6 h-6' /> Click a site to open it in the connected browser. Currently, only sites marked green can be controlled; support for other sites will be added soon.
-                                </small>
-                                    </>)}
+                                    </main>
+                                </section>
+
+                                <section>
+                                    <div className="flex items-center justify-between mb-3 px-1">
+                                        <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Open Media Tabs</h4>
+                                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-zinc-900 text-zinc-500 border border-zinc-800">{Object.keys(tabsById).length}</span>
+                                    </div>
+                                    <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                        {Object.values(tabsById).length === 0 ? (
+                                            <div className="py-8 flex flex-col items-center justify-center text-center border border-dashed border-zinc-800 rounded-xl bg-zinc-900/20">
+                                                <p className="text-zinc-500 text-sm font-medium">No media tabs found</p>
+                                                <p className="text-zinc-600 text-xs mt-1">Open a site like YouTube to get started</p>
+                                            </div>
+                                        ) : (
+                                            Object.values(tabsById).map((tab) => (
+                                                <button key={tab.tabId} onClick={() => selectTab(tab.tabId)} className={`group w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all duration-200 border ${activeTabId === tab.tabId ? "bg-zinc-900 border-zinc-700 shadow-sm" : "bg-zinc-900/50 border-transparent hover:bg-zinc-900/50 hover:border-zinc-800/50 text-zinc-400 hover:text-zinc-300"}`}>
+                                                    <div className="relative shrink-0">
+                                                        <img src={tab.url ? `https://www.google.com/s2/favicons?sz=64&domain=${tab.url}` : tab.favIconUrl} className={`w-8 h-8 shadow-sm transition-opacity ${activeTabId === tab.tabId ? 'opacity-100' : 'opacity-70 group-hover:opacity-100'}`} alt="" />
+                                                        {tab.playback === "PLAYING" && (
+                                                            <div className="absolute -bottom-1 -right-1 flex gap-0.5 items-end h-3 w-3 justify-center bg-zinc-950 rounded-full p-0.5 ring-2 ring-zinc-950">
+                                                                <div className="w-0.5 bg-green-500 animate-[music-bar_1s_ease-in-out_infinite] h-full" style={{ animationDelay: '0ms' }} />
+                                                                <div className="w-0.5 bg-green-500 animate-[music-bar_1s_ease-in-out_infinite] h-2/3" style={{ animationDelay: '200ms' }} />
+                                                                <div className="w-0.5 bg-green-500 animate-[music-bar_1s_ease-in-out_infinite] h-full" style={{ animationDelay: '400ms' }} />
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className={`text-sm font-medium truncate ${activeTabId === tab.tabId ? 'text-zinc-100' : 'text-zinc-400 group-hover:text-zinc-200'}`}>
+                                                            {tab.title}
+                                                        </div>
+                                                        <div className="text-[10px] text-zinc-500 truncate mt-0.5">
+                                                            {tab.url ? new URL(tab.url).hostname.replace('www.', '') : 'Unknown Source'}
+                                                        </div>
+                                                    </div>
+
+                                                    {activeTabId === tab.tabId && (
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
+                                                    )}
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                </section>
+
+                                {
+                                   Number.parseFloat(hostInfo?.extensionVersion || 0) >= Number.parseFloat(LEAST_EXTENSION_VERSION) && (
+                                        <section className=''>
+                                            <div className="flex items-center gap-2 my-2">
+                                                <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Quick Launch: One tap open</h4>
+                                                <div className="h-px flex-1 bg-zinc-800/50"></div>
+                                            </div>
+                                            <QuickLaunchGrid onLaunch={openNewTab} />
+                                        </section>
+                                    )
+                                }
+
                             </div>
                         ))
                         .with(MESSAGE_TYPES.WAITING, () => (
-                            <div className="text-center text-zinc-400 text-sm py-8">
-                                Waiting for host to reconnect…
+                            <div className="text-center py-12 space-y-4">
+                                <div className="inline-block p-4 rounded-full bg-zinc-900 border border-zinc-800 animate-pulse">
+                                    <IoMdBulb className="text-yellow-500 w-8 h-8" />
+                                </div>
+                                <div>
+                                    <h3 className="text-white font-medium">Host Disconnected</h3>
+                                    <p className="text-zinc-500 text-sm">Waiting for the extension to come back online...</p>
+                                </div>
                             </div>
                         ))
                         .with(MESSAGE_TYPES.DISCONNECTED, () => (
-                            <div className="text-center text-zinc-400 text-sm py-8">
-                                Not connected with server.
+                            <div className="text-center py-12">
+                                <p className="text-zinc-500">Server connection lost.</p>
+                                <button onClick={() => globalThis.location.reload()} className="mt-4 text-sm text-blue-400 hover:text-blue-300">Reload App</button>
                             </div>
                         ))
                         .otherwise(() => null)}
                 </div>
-            </div>
-
-            <footer className='flex gap-4 flex-col items-center '>
-                <a href="https://www.buymeacoffee.com/jadhavsharad" target="_blank">
-                    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" className='w-36' />
-                </a>
-                <p>Made with ❤️ by <a href="https://github.com/jadhavsharad" target="_blank" rel="noopener noreferrer">Sharad Jadhav</a></p>
-            </footer>
+            </main>
         </div>
     )
 }

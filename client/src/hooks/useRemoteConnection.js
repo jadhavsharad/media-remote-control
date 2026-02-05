@@ -5,6 +5,7 @@ import { MESSAGE_TYPES } from '../constants/constants'; // Adjust path as needed
 
 const WS_URL = import.meta.env.VITE_WS_URL;
 const RECONNECT_DELAY = 2000;
+const OPTIMISTIC_LOCK_DURATION = 1000; // Ignore server updates for 1s after user interaction
 
 export const useRemoteConnection = () => {
     const [status, setStatus] = useState(MESSAGE_TYPES.DISCONNECTED);
@@ -16,14 +17,7 @@ export const useRemoteConnection = () => {
     const wsRef = useRef(null);
     const isMounted = useRef(true);
     const reconnectTimeoutRef = useRef(null);
-    
-    // Helper to check token
-    const getToken = () => {
-        const t = localStorage.getItem("trust_token");
-        return t && t !== "null" ? t : null;
-    };
-    
-    const trustTokenRef = useRef(getToken());
+    const trustTokenRef = useRef(localStorage.getItem("trust_token") === "null" ? null : localStorage.getItem("trust_token"));
 
     const setToken = (token) => {
         if (token) {
@@ -36,7 +30,6 @@ export const useRemoteConnection = () => {
     };
 
     const isOpen = () => wsRef.current?.readyState === WebSocket.OPEN;
-    const isConnecting = () => wsRef.current?.readyState === WebSocket.CONNECTING;
 
     const send = useCallback((msg) => {
         if (!isOpen()) return;
@@ -77,7 +70,13 @@ export const useRemoteConnection = () => {
                 setTabsById(prev => {
                     const next = {};
                     m.tabs.forEach(tab => {
-                        next[tab.tabId] = { ...prev[tab.tabId], ...tab };
+
+                        const existingLock = prev[tab.tabId]?.lockedUntil;
+                        next[tab.tabId] = { 
+                            ...prev[tab.tabId], 
+                            ...tab,
+                            lockedUntil: existingLock
+                        };
                     });
                     return next;
                 });
@@ -85,8 +84,8 @@ export const useRemoteConnection = () => {
             .with({ type: MESSAGE_TYPES.STATE_UPDATE }, (m) => {
                 setTabsById(prev => {
                     const tab = prev[m.tabId] || {};
-                    // Simple timestamp check
-                    if (tab.lastUpdateAt && m.timestamp && m.timestamp < tab.lastUpdateAt) {
+                    const now = Date.now();
+                    if (tab.lockedUntil && now < tab.lockedUntil) {
                         return prev;
                     }
                     return {
@@ -99,7 +98,7 @@ export const useRemoteConnection = () => {
                     };
                 });
             })
-            .otherwise(() => {});
+            .otherwise(() => { });
     }, []);
 
     // Connection Logic
@@ -107,7 +106,7 @@ export const useRemoteConnection = () => {
         isMounted.current = true;
 
         const connect = () => {
-            if (isOpen() || isConnecting()) return;
+            if (isOpen() || wsRef.current?.readyState === WebSocket.CONNECTING) return;
 
             setStatus(MESSAGE_TYPES.CONNECTING);
             const ws = new WebSocket(WS_URL);
@@ -129,14 +128,9 @@ export const useRemoteConnection = () => {
                 reconnectTimeoutRef.current = setTimeout(connect, RECONNECT_DELAY);
             };
 
-            ws.onerror = (e) => console.error("WS Error", e);
-
             ws.onmessage = (event) => {
-                try {
-                    handleMessage(JSON.parse(event.data));
-                } catch (e) {
-                    console.error("Parse error", e);
-                }
+                try { handleMessage(JSON.parse(event.data)); } 
+                catch (e) { console.error("Parse error", e); }
             };
 
             wsRef.current = ws;
@@ -160,7 +154,26 @@ export const useRemoteConnection = () => {
     };
 
     const updateTabState = (tabId, key, value) => {
-        if (!isOpen()) return;
+
+        if (!isOpen()) {
+            toast.error("Not connected to host");
+            return;
+        }
+
+
+        setTabsById((prev) => {
+            const tab = prev[tabId];
+            if (!tab) return prev;
+            return {
+                ...prev,
+                [tabId]: {
+                    ...tab,
+                    [key]: value,
+                    lockedUntil: Date.now() + OPTIMISTIC_LOCK_DURATION 
+                }
+            };
+        });
+
         send({
             type: MESSAGE_TYPES.STATE_UPDATE,
             intent: MESSAGE_TYPES.INTENT.SET,

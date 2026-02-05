@@ -60,6 +60,7 @@ function reportMediaState(key, value) {
       }
     }).catch(() => { });
   } catch {
+    console.log("Failed to send message to background script");
   }
 }
 
