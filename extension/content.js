@@ -32,7 +32,7 @@ function isMediaState(key) {
  */
 function isValidMedia(media) {
   return (
-    (media instanceof HTMLVideoElement || media instanceof HTMLAudioElement) &&
+    media instanceof HTMLMediaElement &&
     media.isConnected &&
     (media.tagName === "AUDIO" || !media.disablePictureInPicture) &&
     media.readyState >= 2
@@ -50,15 +50,7 @@ function reportMediaState(key, value) {
   lastReportedState[key] = value;
 
   try {
-    chrome.runtime.sendMessage({
-      type: "receive.from.content_script",
-      payload: {
-        type: MESSAGE_TYPES.STATE_UPDATE,
-        intent: MESSAGE_TYPES.INTENT.REPORT,
-        key,
-        value
-      }
-    }).catch(() => { });
+    chrome.runtime.sendMessage({ type: "receive.from.content_script", payload: { type: MESSAGE_TYPES.STATE_UPDATE, state, intent: MESSAGE_TYPES.INTENT.REPORT, }, }).catch(() => { });
   } catch {
     console.log("Failed to send message to background script");
   }
@@ -126,7 +118,6 @@ function detachMedia() {
 
   currentMedia = null;
   lastReportedState = {};
-  reportMediaState(MEDIA_STATE.PLAYBACK, "IDLE");
 }
 
 function attachMedia(media) {
@@ -194,7 +185,7 @@ const COMMAND_HANDLERS = {
 
   [MEDIA_STATE.TIME]: (media, value) => {
     const time = Number(value);
-    if (!Number.isNaN(time) && time >= 0) {
+    if (!isNaN(time) && time >= 0) {
       media.currentTime = time;
     }
   },
@@ -218,7 +209,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Validate message structure
   if (
     !msg ||
-    msg?.type !== MESSAGE_TYPES.STATE_UPDATE ||
+    msg.type !== MESSAGE_TYPES.STATE_UPDATE ||
     typeof msg.type !== "string" ||
     !isMediaState(msg.key)
   ) {
@@ -227,7 +218,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   // Validate media availability
-  if (!currentMedia?.isConnected) {
+  if (!currentMedia || !currentMedia.isConnected) {
     sendResponse({ ok: false, reason: "No media" });
     return;
   }

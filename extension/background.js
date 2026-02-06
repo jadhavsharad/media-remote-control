@@ -68,7 +68,7 @@ class StateManager {
     if (data === null) {
       delete ctx[remoteId]; // Remove remote
     } else {
-      ctx[remoteId] = { ...(ctx[remoteId]), ...data };
+      ctx[remoteId] = { ...(ctx[remoteId] || {}), ...data };
     }
 
     await this.set({ remoteContext: ctx });
@@ -143,6 +143,7 @@ const COMMAND_REGISTRY = {
 // Initialize immediately
 (async () => {
   await state.init();
+  await mediaStore.load();
   await ensureOffscreen();
   // Clean up stale contexts on boot
   refreshMediaList();
@@ -220,7 +221,7 @@ receiveMessage(CHANNELS.FROM_CONTENT_SCRIPT, async (payload, sender) => {
   // REPORT means the media state changed (e.g. user paused, changed volume, etc.)
   // We forward this to the server so the remote UI updates
   if (payload.type === MESSAGE_TYPES.STATE_UPDATE && payload.intent === MESSAGE_TYPES.INTENT.REPORT) {
-    if (sender?.tab) {
+    if (sender && sender.tab) {
       const tabId = sender.tab.id;
       const { key, value } = payload;
       if (key) {
@@ -349,7 +350,7 @@ async function executeRemoteCommand(msg) {
 
   // 1. Validate Context
   const ctx = state.getRemoteContext(remoteId);
-  if (!ctx?.tabId) {
+  if (!ctx || !ctx.tabId) {
     console.warn(`Command ignored: No active tab for remote ${remoteId}`);
     return;
   }
@@ -487,13 +488,15 @@ async function sendToTabSafe(tabId, message) {
   try {
     return await chrome.tabs.sendMessage(tabId, message);
   } catch (error) {
-    console.warn(`Tab ${tabId} unreachable. Attempting reinjection...`, error);
+    // Common error: "Could not establish connection. Receiving end does not exist."
+    // This implies the content script is not loaded.
+    console.warn(`Tab ${tabId} unreachable. Attempting reinjection...`);
     try {
       await injectContentScriptSingle(tabId);
-      // Retry once more
+      // Retry once
       return await chrome.tabs.sendMessage(tabId, message);
-    } catch (error) {
-      console.error(`Failed to recover tab ${tabId}:`, error);
+    } catch (retryErr) {
+      console.error(`Failed to recover tab ${tabId}:`, retryErr);
       return null;
     }
   }
@@ -583,7 +586,7 @@ function receiveMessage(channel, handler) {
     if (!msg || msg.type !== channel) return false;
 
     // Content Script Security: Verify sender is a tab
-    if (channel === CHANNELS.FROM_CONTENT_SCRIPT && (!sender?.tab.id)) {
+    if (channel === CHANNELS.FROM_CONTENT_SCRIPT && (!sender.tab || !sender.tab.id)) {
       return false;
     }
 

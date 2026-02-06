@@ -23,20 +23,44 @@ const STATUS_COLORS = {
 
 
 const App = () => {
-    const {
-        status,
-        hostInfo,
-        tabsById,
-        activeTab,
-        activeTabId,
-        pair,
-        updateTabState,
-        selectTab,
-        disconnect,
-        openNewTab
-    } = useRemoteConnection();
 
-    // Handlers
+    const [status, setStatus] = useState(MESSAGE_TYPES.DISCONNECTED);
+    const [tabsById, setTabsById] = useState({});
+    const [activeTabId, setActiveTabId] = useState(null);
+    const activeTab = activeTabId ? tabsById[activeTabId] : null;
+    const [hostInfo, setHostInfo] = useState(null);
+
+    const isConnecting = () => { return wsRef.current?.readyState === WebSocket.CONNECTING }
+    const isOpen = () => { return wsRef.current?.readyState === WebSocket.OPEN }
+    const setToken = (token) => { token ? (localStorage.setItem("trust_token", token), trustTokenRef.current = token) : (localStorage.removeItem("trust_token"), trustTokenRef.current = null) }
+    const getToken = () => { const t = localStorage.getItem("trust_token"); return t && t !== "null" ? t : null; }
+
+    const send = useCallback((msg) => {
+        if (!isOpen()) return;
+        wsRef.current.send(JSON.stringify(msg));
+    }, []);
+
+    const sendToActiveTab = useCallback((key, value) => {
+        if (!isOpen()) return;
+        if (!activeTabId) { toast.error("Select a tab first"); return }
+
+        send({
+            type: MESSAGE_TYPES.STATE_UPDATE,
+            intent: MESSAGE_TYPES.INTENT.SET,
+            key,
+            value,
+            tabId: activeTabId
+        });
+    }, [activeTabId]);
+
+    const activateTab = (tabId) => { setActiveTabId(tabId); send({ type: MESSAGE_TYPES.SELECT_ACTIVE_TAB, tabId }); }
+    const deactivateTab = () => { setActiveTabId(null); }
+    const handleDisconnect = () => {
+        setToken(null);
+        setStatus(MESSAGE_TYPES.DISCONNECTED);
+        window.location.reload();
+    }
+
     const handleTogglePlayback = () => {
         if (!activeTab) return;
         updateTabState(activeTabId, MEDIA_STATE.PLAYBACK, activeTab.playback === "PLAYING" ? "PAUSED" : "PLAYING");
@@ -44,9 +68,155 @@ const App = () => {
 
     const handleToggleMute = () => {
         if (!activeTab) return;
-        updateTabState(activeTabId, MEDIA_STATE.MUTE, !activeTab.muted);
+        sendToActiveTab(MEDIA_STATE.MUTE, !activeTab.muted);
     };
 
+    const handleVolumeChange = (value) => {
+        if (!activeTab) return;
+        sendToActiveTab(MEDIA_STATE.VOLUME, value);
+    };
+
+
+    const trustTokenRef = useRef(getToken());
+    const wsRef = useRef(null);
+    const isMounted = useRef(true);
+    const reconnectTimeoutRef = useRef(null);
+    const handleMessageRef = useRef(null);
+
+    useEffect(() => {
+        isMounted.current = true;
+        const connect = () => {
+            if (isOpen() || isConnecting()) return;
+
+            setStatus(MESSAGE_TYPES.CONNECTING);
+
+            const ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                if (!isMounted.current) return;
+
+                const token = trustTokenRef.current;
+
+                if (token) {
+                    setStatus(MESSAGE_TYPES.VERIFYING);
+                    send({ type: MESSAGE_TYPES.VALIDATE_SESSION, trustToken: token });
+                } else {
+                    setStatus(MESSAGE_TYPES.CONNECTED);
+                }
+            };
+
+            ws.onclose = () => {
+                if (!isMounted.current) return;
+                setStatus(MESSAGE_TYPES.DISCONNECTED);
+                reconnectTimeoutRef.current = setTimeout(connect, RECONNECT_DELAY);
+            };
+
+            ws.onerror = (e) => {
+                log("onerror", e);
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    handleMessageRef.current?.(msg);
+                } catch (e) {
+                    console.error("Invalid WS message", e);
+                }
+            };
+            wsRef.current = ws;
+        };
+
+        connect();
+
+        return () => {
+            isMounted.current = false;
+            wsRef.current?.close();
+            clearTimeout(reconnectTimeoutRef.current);
+        };
+    }, []);
+
+
+    const handleMessage = (msg) => {
+        if (!msg?.type) return;
+
+        match(msg)
+            .with({ type: MESSAGE_TYPES.PAIR_SUCCESS }, (m) => {
+                setToken(m.trustToken); // set the token in the ref
+                setHostInfo(m.hostInfo);
+                setStatus(MESSAGE_TYPES.PAIR_SUCCESS); // set the status to PAIR_SUCCESS
+                toast.success("Pairing successful");
+            })
+            .with({ type: MESSAGE_TYPES.PAIR_FAILED }, () => {
+                toast.error("Pairing failed");
+                setStatus(MESSAGE_TYPES.DISCONNECTED); // set the status to DISCONNECTED
+                window.location.reload();
+            })
+            .with({ type: MESSAGE_TYPES.SESSION_VALID }, (m) => {
+                setHostInfo(m.hostInfo);
+                setStatus(MESSAGE_TYPES.PAIR_SUCCESS); // set the status to PAIR_SUCCESS
+                toast.success("Session valid");
+            })
+            .with({ type: MESSAGE_TYPES.SESSION_INVALID }, () => {
+                setToken(null); // set the token in the ref to null
+                setStatus(MESSAGE_TYPES.DISCONNECTED); // set the status to DISCONNECTED
+                toast.error("Session invalid");
+                window.location.reload();
+            })
+            .with({ type: MESSAGE_TYPES.HOST_DISCONNECTED }, () => {
+                setStatus(MESSAGE_TYPES.WAITING); // set the status to WAITING
+                toast.error("Host disconnected");
+                window.location.reload();
+            })
+            .with({ type: MESSAGE_TYPES.MEDIA_LIST, tabs: P.array() }, (m) => {
+                setTabsById(prev => {
+                    const next = {}; // create a new object, copy the previous state
+                    for (const tab of m.tabs) { // update each tab in the new object
+                        next[tab.tabId] = { // update the tab in the new object
+                            ...prev[tab.tabId], // keep playback state if exists
+                            ...tab // update the tab
+                        };
+                    }
+
+                    return next;
+                });
+            })
+
+            .with({ type: MESSAGE_TYPES.STATE_UPDATE }, (m) => {
+                setTabsById(prev => {
+                    const tab = prev[m.tabId]; // get the tab from the previous state
+                    if (!tab) return prev; // if the tab does not exist, return the previous state
+
+                    return {
+                        ...prev,
+                        [m.tabId]: {
+                            ...tab,
+                            [m.key]: m.value
+                        }
+                    };
+                });
+            })
+            .otherwise(() => { }); // do nothing
+    };
+
+        useEffect(() => {
+        handleMessageRef.current = handleMessage;
+    });
+
+
+    // Handle QR code scan
+    const onScanSuccess = useCallback((decodedText) => {
+        if (!decodedText) return;
+
+        if (isOpen()) {
+            send({ type: MESSAGE_TYPES.EXCHANGE_PAIR_KEY, code: decodedText }); // send the pair key to the server
+            setStatus(MESSAGE_TYPES.VERIFYING);
+        }
+    }, [send]);
+
+    
+    const triggerNewTab = (url) => {
+        send({ type: MESSAGE_TYPES.NEW_TAB, url });
+    }
 
     return (
         <div className='min-h-screen bg-black text-zinc-100 px-4 py-6 flex flex-col items-center justify-center gap-4'>
